@@ -20,13 +20,11 @@ from app.models.entities import (
     Server,
 )
 from app.services.backup_engines import (
-    run_borg_backup,
     run_database_backup,
     run_docker_backup,
-    run_restic_backup,
     run_rclone_backup,
     run_rsync_backup,
-    restore_restic,
+    restore_rsync,
 )
 from app.services.health_engine import calculate_backup_health
 from app.services.ssh_service import run_ssh_command_sync
@@ -85,40 +83,48 @@ def execute_backup_run(self, run_id: str) -> dict:
         engine = backup.engine
         btype = backup.backup_type
 
-        if btype == BackupType.DATABASE:
-            result = run_database_backup(
-                config.get("db_type", "postgresql"),
-                config.get("connection_string", ""),
-                os.path.join(target, f"db-{run.id}.dump"),
-            )
-        elif btype == BackupType.DOCKER:
-            result = run_docker_backup(
-                config.get("container_ids", []),
-                target,
-                config.get("include_volumes", True),
-            )
-        elif engine == BackupEngine.RESTIC:
-            local_sources = sources
-            if server:
-                for src in sources:
-                    run_ssh_command_sync(
-                        server.hostname,
-                        server.port,
-                        server.username,
-                        f"test -e {src}",
-                        password,
-                        private_key,
-                        server.auth_method,
-                    )
-            result = run_restic_backup(target, local_sources, passphrase, backup.backup_type.value)
-        elif engine == BackupEngine.RSYNC:
-            result = run_rsync_backup(sources, target, backup.backup_type.value, backup.compression, remote)
-        elif engine == BackupEngine.RCLONE:
-            result = run_rclone_backup(sources[0] if sources else "/", target, config.get("rclone", {}))
-        elif engine == BackupEngine.BORG:
-            result = run_borg_backup(target, sources, passphrase)
-        else:
-            result = run_restic_backup(target, sources, passphrase)
+        # Write the SSH private key to a temp file if available (rsync needs a file path)
+        ssh_key_path = None
+        if private_key:
+            import tempfile
+            kf = tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False)
+            kf.write(private_key)
+            kf.close()
+            os.chmod(kf.name, 0o600)
+            ssh_key_path = kf.name
+
+        try:
+            if btype == BackupType.DATABASE:
+                result = run_database_backup(
+                    config.get("db_type", "postgresql"),
+                    config.get("connection_string", ""),
+                    os.path.join(target, f"db-{run.id}.dump"),
+                )
+            elif btype == BackupType.DOCKER:
+                result = run_docker_backup(
+                    config.get("container_ids", []),
+                    target,
+                    config.get("include_volumes", True),
+                )
+            elif engine == BackupEngine.RCLONE:
+                result = run_rclone_backup(
+                    sources[0] if sources else "/",
+                    target,
+                    config.get("rclone", {}),
+                )
+            else:
+                # Default: rsync (handles both local and remote via SSH)
+                result = run_rsync_backup(
+                    sources,
+                    target,
+                    backup.backup_type.value,
+                    backup.compression,
+                    remote,
+                    ssh_key_path,
+                )
+        finally:
+            if ssh_key_path and os.path.exists(ssh_key_path):
+                os.unlink(ssh_key_path)
 
         run.status = JobStatus.COMPLETED if result.success else JobStatus.FAILED
         run.completed_at = datetime.now(timezone.utc)
@@ -189,28 +195,45 @@ def execute_restore_job(self, job_id: str) -> dict:
             return {"status": "failed", "reason": "overwrite_protection"}
 
         config = backup.config_json or {}
-        passphrase = config.get("encryption_password", settings.ENCRYPTION_KEY[:32])
-        run = None
-        if backup.engine == BackupEngine.RESTIC and job.backup_run_id:
-            br = session.get(BackupRun, job.backup_run_id)
-            snapshot = br.snapshot_id if br else "latest"
-            result = restore_restic(backup.target_path, snapshot or "latest", job.target_path, passphrase)
-            job.status = JobStatus.COMPLETED if result.success else JobStatus.FAILED
-            job.log_output = result.log_output
-            job.error_message = result.error_message
-        else:
-            import shutil
 
-            if os.path.exists(backup.target_path):
-                if os.path.isdir(backup.target_path):
-                    shutil.copytree(backup.target_path, job.target_path, dirs_exist_ok=not job.overwrite_protection)
-                else:
-                    os.makedirs(job.target_path, exist_ok=True)
-                    shutil.copy2(backup.target_path, job.target_path)
-                job.status = JobStatus.COMPLETED
-            else:
-                job.status = JobStatus.FAILED
-                job.error_message = "Backup source path not found"
+        # Resolve server credentials for remote restore (push back to source server)
+        server = session.get(Server, backup.server_id) if backup.server_id else None
+        remote = None
+        ssh_key_path = None
+        if server:
+            private_key = decrypt_secret(server.encrypted_private_key) if server.encrypted_private_key else None
+            if private_key:
+                import tempfile
+                kf = tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False)
+                kf.write(private_key)
+                kf.close()
+                os.chmod(kf.name, 0o600)
+                ssh_key_path = kf.name
+            remote = f"{server.username}@{server.hostname}"
+
+        backup_source = backup.target_path
+        if not backup_source or not os.path.exists(backup_source):
+            job.status = JobStatus.FAILED
+            job.error_message = "Backup source path not found"
+            job.completed_at = datetime.now(timezone.utc)
+            session.commit()
+            return {"status": "failed", "reason": "backup_path_missing"}
+
+        try:
+            result = restore_rsync(
+                backup_source,
+                job.target_path,
+                compression=backup.compression,
+                remote=remote,
+                ssh_key_path=ssh_key_path,
+            )
+        finally:
+            if ssh_key_path and os.path.exists(ssh_key_path):
+                os.unlink(ssh_key_path)
+
+        job.status = JobStatus.COMPLETED if result.success else JobStatus.FAILED
+        job.log_output = result.log_output
+        job.error_message = result.error_message
 
         job.completed_at = datetime.now(timezone.utc)
         session.commit()

@@ -1,14 +1,12 @@
 "use client";
 
-import { useTheme } from "next-themes";
-import { Moon, Sun, Bell } from "lucide-react";
+import { Bell } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
 export function Header({ title }: { title: string }) {
-  const { theme, setTheme } = useTheme();
   const [alertCount, setAlertCount] = useState(0);
   const [user, setUser] = useState<{ full_name: string; email: string } | null>(null);
 
@@ -21,7 +19,7 @@ export function Header({ title }: { title: string }) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-emerald-100/80 bg-white/80 px-6 backdrop-blur-xl dark:border-emerald-900/50 dark:bg-[#0d1f18]/80 md:px-8">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-emerald-100/80 bg-white/80 px-6 backdrop-blur-xl md:px-8">
       <motion.h1
         key={title}
         initial={{ opacity: 0, x: -8 }}
@@ -39,15 +37,12 @@ export function Header({ title }: { title: string }) {
             </span>
           )}
         </Button>
-        <Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-          {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-        </Button>
-        <div className="ml-1 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-1.5 dark:border-emerald-800 dark:bg-emerald-950/40">
+        <div className="ml-1 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-1.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary text-sm font-bold text-white">
             {user?.full_name?.[0] || "U"}
           </div>
           <div className="hidden sm:block">
-            <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">{user?.full_name}</p>
+            <p className="text-sm font-medium text-emerald-800">{user?.full_name}</p>
             <p className="text-xs text-muted-foreground">{user?.email}</p>
           </div>
         </div>

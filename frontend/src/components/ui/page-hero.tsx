@@ -21,8 +21,8 @@ export function PageHero({
       className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="flex items-start gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-200 bg-white shadow-sm dark:border-emerald-800 dark:bg-emerald-950/40">
-          <Icon className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-200 bg-white shadow-sm">
+          <Icon className="h-6 w-6 text-emerald-600" />
         </div>
         <div>
           <h2 className="text-lg font-semibold text-foreground">{title}</h2>

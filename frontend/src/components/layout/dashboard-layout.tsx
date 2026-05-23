@@ -19,7 +19,7 @@ export function DashboardLayout({ children, title }: { children: React.ReactNode
     <div className="relative min-h-screen bg-background">
       <CsrfSync />
       <div className="pointer-events-none fixed inset-0 tech-grid opacity-40" />
-      <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-emerald-50/80 via-transparent to-white dark:from-emerald-950/30 dark:via-transparent dark:to-[#0a1612]" />
+      <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-emerald-50/80 via-transparent to-white" />
       <Sidebar />
       <div className="relative pl-[var(--sidebar-width)]">
         <Header title={title} />

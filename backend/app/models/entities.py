@@ -49,10 +49,8 @@ class BackupType(str, enum.Enum):
 
 
 class BackupEngine(str, enum.Enum):
-    RESTIC = "restic"
     RSYNC = "rsync"
     RCLONE = "rclone"
-    BORG = "borg"
 
 
 class JobStatus(str, enum.Enum):
@@ -223,7 +221,7 @@ class Backup(Base):
     policy_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("backup_policies.id", ondelete="SET NULL"))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     backup_type: Mapped[BackupType] = mapped_column(Enum(BackupType), nullable=False)
-    engine: Mapped[BackupEngine] = mapped_column(Enum(BackupEngine), default=BackupEngine.RESTIC)
+    engine: Mapped[BackupEngine] = mapped_column(Enum(BackupEngine), default=BackupEngine.RSYNC)
     source_paths: Mapped[list | None] = mapped_column(JSON, default=list)
     target_path: Mapped[str] = mapped_column(String(512), nullable=False)
     schedule_cron: Mapped[str | None] = mapped_column(String(100))

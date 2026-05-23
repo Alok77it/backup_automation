@@ -23,7 +23,7 @@ export function MetricCard({ title, value, subtitle, icon: Icon, trend, classNam
       transition={{ duration: 0.35, delay }}
       whileHover={{ y: -2, transition: { duration: 0.2 } }}
     >
-      <Card className={cn("glass overflow-hidden border-emerald-100 dark:border-emerald-900", className)}>
+      <Card className={cn("glass overflow-hidden border-emerald-100", className)}>
         <div className="h-0.5 w-full bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600" />
         <CardContent className="p-6">
           <div className="flex items-start justify-between">
@@ -38,8 +38,8 @@ export function MetricCard({ title, value, subtitle, icon: Icon, trend, classNam
                 </p>
               )}
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/50">
-              <Icon className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50">
+              <Icon className="h-6 w-6 text-emerald-600" />
             </div>
           </div>
         </CardContent>

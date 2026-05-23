@@ -103,8 +103,8 @@ export default function AIPage() {
           animate={{ opacity: 1 }}
           className={`mb-4 flex items-center gap-2 rounded-xl border px-4 py-2 text-sm ${
             aiStatus.configured
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
-              : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-amber-200 bg-amber-50 text-amber-800"
           }`}
         >
           {aiStatus.configured ? (
@@ -130,7 +130,7 @@ export default function AIPage() {
               whileTap={{ scale: 0.98 }}
               type="button"
               onClick={() => sendMessage(s)}
-              className="rounded-full border border-emerald-200 bg-white px-4 py-1.5 text-sm text-emerald-800 shadow-sm transition hover:bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+              className="rounded-full border border-emerald-200 bg-white px-4 py-1.5 text-sm text-emerald-800 shadow-sm transition hover:bg-emerald-50"
             >
               <Sparkles className="mr-1 inline h-3 w-3" />
               {s}
@@ -152,7 +152,7 @@ export default function AIPage() {
                     className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
                       m.role === "user"
                         ? "gradient-primary text-white shadow-md"
-                        : "border border-emerald-100 bg-white text-foreground dark:border-emerald-900 dark:bg-emerald-950/40"
+                        : "border border-emerald-100 bg-white text-foreground"
                     }`}
                   >
                     {m.role === "assistant" && <Brain className="mb-1 inline h-4 w-4 text-emerald-600" />}
@@ -170,7 +170,7 @@ export default function AIPage() {
               )}
               <div ref={bottomRef} />
             </div>
-            <div className="flex gap-2 border-t border-emerald-100 p-4 dark:border-emerald-900">
+            <div className="flex gap-2 border-t border-emerald-100 p-4">
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

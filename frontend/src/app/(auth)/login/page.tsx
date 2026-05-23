@@ -33,7 +33,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#D1FAE5] via-white to-[#F3F4F6] p-4 dark:from-gray-900 dark:via-gray-900 dark:to-gray-950">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#D1FAE5] via-white to-[#F3F4F6] p-4">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl gradient-primary shadow-lg">

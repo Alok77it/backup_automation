@@ -112,7 +112,7 @@ class BackupCreate(BaseModel):
     server_id: uuid.UUID | None = None
     policy_id: uuid.UUID | None = None
     backup_type: str
-    engine: str = "restic"
+    engine: str = "rsync"
     source_paths: list[str] = Field(default_factory=list)
     target_path: str | None = None
     schedule_cron: str | None = None

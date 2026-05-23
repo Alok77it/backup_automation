@@ -13,9 +13,9 @@ export function AlertBanner({
 }) {
   if (!message) return null;
   const styles = {
-    error: "bg-red-50 border-red-200 text-red-800 dark:bg-red-950/50 dark:border-red-800 dark:text-red-200",
-    success: "bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/50 dark:border-emerald-700 dark:text-emerald-100",
-    info: "bg-white border-emerald-200 text-emerald-900 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-100",
+    error: "bg-red-50 border-red-200 text-red-800",
+    success: "bg-emerald-50 border-emerald-200 text-emerald-800",
+    info: "bg-white border-emerald-200 text-emerald-900",
   };
   const Icon = type === "success" ? CheckCircle2 : AlertCircle;
   return (

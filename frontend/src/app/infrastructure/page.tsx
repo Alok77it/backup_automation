@@ -169,9 +169,9 @@ export default function InfrastructurePage() {
                       ["Disk", s.disk_percent],
                     ] as [string, number | null][]
                   ).map(([label, val]) => (
-                    <div key={label} className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-2 dark:border-emerald-900 dark:bg-emerald-950/30">
+                    <div key={label} className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-2">
                       <p className="text-xs text-muted-foreground">{label}</p>
-                      <p className="font-bold text-emerald-700 dark:text-emerald-400">{val != null ? formatPercent(val) : "—"}</p>
+                      <p className="font-bold text-emerald-700">{val != null ? formatPercent(val) : "—"}</p>
                     </div>
                   ))}
                 </div>

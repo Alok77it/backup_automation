@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    restic rsync rclone borgbackup openssh-client postgresql-client \
+    rsync rclone openssh-client postgresql-client \
     docker.io curl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -13,7 +13,6 @@ export function SelectField({ label, hint, className, children, ...props }: Sele
         className={cn(
           "flex h-10 w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-foreground",
           "focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500",
-          "dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-50",
           className
         )}
         {...props}

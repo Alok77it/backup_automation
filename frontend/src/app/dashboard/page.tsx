@@ -96,7 +96,7 @@ export default function DashboardPage() {
           <div className="space-y-3">
             {events.length === 0 && <p className="text-sm text-gray-500">No recent events</p>}
             {events.map((e) => (
-              <div key={e.id} className="flex items-center gap-4 rounded-xl border border-emerald-100 p-4 transition hover:bg-emerald-50/80 dark:border-emerald-900 dark:hover:bg-emerald-950/30">
+              <div key={e.id} className="flex items-center gap-4 rounded-xl border border-emerald-100 p-4 transition hover:bg-emerald-50/80">
                 <Badge variant={e.level === "error" ? "error" : e.level === "warning" ? "warning" : "default"}>{e.level}</Badge>
                 <div className="flex-1">
                   <p className="text-sm font-medium">{e.message}</p>

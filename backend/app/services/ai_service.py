@@ -48,7 +48,7 @@ async def _anthropic_chat(messages: list[dict[str, str]]) -> str:
     settings = get_settings()
     client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
     response = await client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=4096,
         system=SYSTEM_PROMPT,
         messages=messages,
@@ -130,11 +130,42 @@ def _heuristic_response(message: str, context: dict | None) -> str:
             "4. Consider compression tuning"
         )
 
+    if "alert" in msg_lower or "warn" in msg_lower:
+        unresolved = ctx.get("unresolved_alerts", 0)
+        return (
+            f"## Alert Summary\n\n"
+            f"You have **{unresolved}** unresolved alert(s).\n\n"
+            "**Actions:**\n"
+            "1. Review alerts in the Alerts section\n"
+            "2. Resolve false positives to reduce noise\n"
+            "3. Configure alert thresholds in Policies\n"
+            "4. Set up email notifications for critical events"
+        )
+
+    if "server" in msg_lower or "infrastructure" in msg_lower or "fleet" in msg_lower:
+        servers = ctx.get("servers_at_risk", [])
+        confidence = ctx.get("restore_confidence", 0)
+        return (
+            f"## Infrastructure Status\n\n"
+            f"Restore confidence across your fleet: **{confidence:.0f}%**\n\n"
+            + (f"**Servers needing attention ({len(servers)}):**\n" + "\n".join(f"- **{s['name']}**: {s.get('status', 'unknown')}" for s in servers) + "\n\n" if servers else "All servers appear healthy.\n\n")
+            + "**Recommendations:**\n"
+            "1. Run connection tests on all servers regularly\n"
+            "2. Collect fresh metrics to get current CPU/RAM/Disk readings\n"
+            "3. Ensure backup agents have correct SSH credentials"
+        )
+
     return (
         "## Backup Intelligence Assistant\n\n"
-        "I can help analyze backup failures, performance issues, server risks, restore safety, and storage optimization. "
-        "Configure ANTHROPIC_API_KEY or OPENAI_API_KEY for enhanced AI analysis.\n\n"
-        f"Your question: {message}"
+        "I can help you analyze:\n"
+        "- **Backup failures** — root causes and fixes\n"
+        "- **Performance issues** — why backups are slow\n"
+        "- **Server risks** — which servers need attention\n"
+        "- **Restore safety** — confidence and risk assessment\n"
+        "- **Storage optimization** — reduce usage and cost\n"
+        "- **Alerts** — what needs immediate attention\n\n"
+        "💡 **Tip:** Add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to your `.env` file and restart the API for full Claude/GPT-powered analysis.\n\n"
+        f"You asked: *{message}*"
     )
 
 

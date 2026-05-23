@@ -18,6 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # ------------------------------------------------------------------ users
     op.create_table(
         "users",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -31,6 +32,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_users_email", "users", ["email"])
 
+    # ---------------------------------------------------------- organizations
     op.create_table(
         "organizations",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -40,7 +42,9 @@ def upgrade() -> None:
         sa.Column("storage_quota_gb", sa.Float(), default=100.0),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_organizations_slug", "organizations", ["slug"], unique=True)
 
+    # -------------------------------------------------- organization_members
     op.create_table(
         "organization_members",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -50,7 +54,10 @@ def upgrade() -> None:
         sa.Column("joined_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.UniqueConstraint("organization_id", "user_id", name="uq_org_user"),
     )
+    op.create_index("ix_org_members_org_id", "organization_members", ["organization_id"])
+    op.create_index("ix_org_members_user_id", "organization_members", ["user_id"])
 
+    # --------------------------------------------------------------- invitations
     op.create_table(
         "invitations",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -63,7 +70,10 @@ def upgrade() -> None:
         sa.Column("expires_at", sa.DateTime(timezone=True)),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_invitations_token", "invitations", ["token"], unique=True)
+    op.create_index("ix_invitations_org_id", "invitations", ["organization_id"])
 
+    # ------------------------------------------------------------------- teams
     op.create_table(
         "teams",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -72,7 +82,9 @@ def upgrade() -> None:
         sa.Column("description", sa.Text()),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_teams_org_id", "teams", ["organization_id"])
 
+    # -------------------------------------------------------------- team_members
     op.create_table(
         "team_members",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -81,7 +93,9 @@ def upgrade() -> None:
         sa.Column("joined_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.UniqueConstraint("team_id", "user_id", name="uq_team_user"),
     )
+    op.create_index("ix_team_members_team_id", "team_members", ["team_id"])
 
+    # ----------------------------------------------------------------- servers
     op.create_table(
         "servers",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -99,7 +113,9 @@ def upgrade() -> None:
         sa.Column("metadata_json", sa.JSON()),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_servers_org_id", "servers", ["organization_id"])
 
+    # ----------------------------------------------------------- backup_policies
     op.create_table(
         "backup_policies",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -117,7 +133,9 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), default=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_backup_policies_org_id", "backup_policies", ["organization_id"])
 
+    # ----------------------------------------------------------------- backups
     op.create_table(
         "backups",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -126,7 +144,7 @@ def upgrade() -> None:
         sa.Column("policy_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("backup_policies.id", ondelete="SET NULL")),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("backup_type", sa.Enum("full", "incremental", "differential", "snapshot", "database", "docker", "path", name="backuptype")),
-        sa.Column("engine", sa.Enum("restic", "rsync", "rclone", "borg", name="backupengine"), default="restic"),
+        sa.Column("engine", sa.Enum("rsync", "rclone", name="backupengine"), default="rsync"),
         sa.Column("source_paths", sa.JSON()),
         sa.Column("target_path", sa.String(512), nullable=False),
         sa.Column("schedule_cron", sa.String(100)),
@@ -140,7 +158,10 @@ def upgrade() -> None:
         sa.Column("corruption_probability", sa.Float(), default=0.0),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_backups_org_id", "backups", ["organization_id"])
+    op.create_index("ix_backups_server_id", "backups", ["server_id"])
 
+    # -------------------------------------------------------------- backup_runs
     op.create_table(
         "backup_runs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -159,7 +180,10 @@ def upgrade() -> None:
         sa.Column("metadata_json", sa.JSON()),
         sa.Column("celery_task_id", sa.String(255)),
     )
+    op.create_index("ix_backup_runs_backup_id", "backup_runs", ["backup_id"])
+    op.create_index("ix_backup_runs_backup_started", "backup_runs", ["backup_id", "started_at"])
 
+    # ------------------------------------------------------------- restore_jobs
     op.create_table(
         "restore_jobs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -181,7 +205,9 @@ def upgrade() -> None:
         sa.Column("celery_task_id", sa.String(255)),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_restore_jobs_backup_id", "restore_jobs", ["backup_id"])
 
+    # -------------------------------------------------------------- log_entries
     op.create_table(
         "log_entries",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -194,7 +220,11 @@ def upgrade() -> None:
         sa.Column("backup_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("backups.id", ondelete="SET NULL")),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_log_entries_org_id", "log_entries", ["organization_id"])
+    op.create_index("ix_log_entries_created_at", "log_entries", ["created_at"])
+    op.create_index("ix_logs_org_created", "log_entries", ["organization_id", "created_at"])
 
+    # ------------------------------------------------------------------- alerts
     op.create_table(
         "alerts",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -209,7 +239,10 @@ def upgrade() -> None:
         sa.Column("metadata_json", sa.JSON()),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_alerts_org_id", "alerts", ["organization_id"])
+    op.create_index("ix_alerts_is_read", "alerts", ["organization_id", "is_read"])
 
+    # --------------------------------------------------------- metric_snapshots
     op.create_table(
         "metric_snapshots",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -228,7 +261,10 @@ def upgrade() -> None:
         sa.Column("uptime_seconds", sa.Float()),
         sa.Column("extra_json", sa.JSON()),
     )
+    op.create_index("ix_metric_snapshots_org_id", "metric_snapshots", ["organization_id"])
+    op.create_index("ix_metrics_server_time", "metric_snapshots", ["server_id", "recorded_at"])
 
+    # ------------------------------------------------------------- storage_usage
     op.create_table(
         "storage_usage",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -241,7 +277,9 @@ def upgrade() -> None:
         sa.Column("backup_count", sa.Integer(), default=0),
         sa.Column("compression_ratio", sa.Float(), default=1.0),
     )
+    op.create_index("ix_storage_usage_org_id", "storage_usage", ["organization_id"])
 
+    # --------------------------------------------------------- ai_conversations
     op.create_table(
         "ai_conversations",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -251,7 +289,10 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_ai_conversations_org_id", "ai_conversations", ["organization_id"])
+    op.create_index("ix_ai_conversations_user_id", "ai_conversations", ["user_id"])
 
+    # ------------------------------------------------- ai_conversation_messages
     op.create_table(
         "ai_conversation_messages",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -261,7 +302,9 @@ def upgrade() -> None:
         sa.Column("metadata_json", sa.JSON()),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_ai_conv_messages_conv_id", "ai_conversation_messages", ["conversation_id"])
 
+    # --------------------------------------------------------------- audit_logs
     op.create_table(
         "audit_logs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -274,7 +317,10 @@ def upgrade() -> None:
         sa.Column("ip_address", sa.String(45)),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_audit_logs_org_id", "audit_logs", ["organization_id"])
+    op.create_index("ix_audit_org_created", "audit_logs", ["organization_id", "created_at"])
 
+    # ---------------------------------------------------- password_reset_tokens
     op.create_table(
         "password_reset_tokens",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -284,9 +330,37 @@ def upgrade() -> None:
         sa.Column("used", sa.Boolean(), default=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.create_index("ix_password_reset_tokens_user_id", "password_reset_tokens", ["user_id"])
 
 
 def downgrade() -> None:
+    # Drop indexes first
+    for idx in [
+        "ix_password_reset_tokens_user_id",
+        "ix_audit_org_created", "ix_audit_logs_org_id",
+        "ix_ai_conv_messages_conv_id",
+        "ix_ai_conversations_user_id", "ix_ai_conversations_org_id",
+        "ix_storage_usage_org_id",
+        "ix_metrics_server_time", "ix_metric_snapshots_org_id",
+        "ix_alerts_is_read", "ix_alerts_org_id",
+        "ix_logs_org_created", "ix_log_entries_created_at", "ix_log_entries_org_id",
+        "ix_restore_jobs_backup_id",
+        "ix_backup_runs_backup_started", "ix_backup_runs_backup_id",
+        "ix_backups_server_id", "ix_backups_org_id",
+        "ix_backup_policies_org_id",
+        "ix_servers_org_id",
+        "ix_teams_org_id",
+        "ix_team_members_team_id",
+        "ix_invitations_org_id", "ix_invitations_token",
+        "ix_org_members_user_id", "ix_org_members_org_id",
+        "ix_organizations_slug",
+        "ix_users_email",
+    ]:
+        try:
+            op.drop_index(idx)
+        except Exception:
+            pass
+
     for table in [
         "password_reset_tokens", "audit_logs", "ai_conversation_messages", "ai_conversations",
         "storage_usage", "metric_snapshots", "alerts", "log_entries", "restore_jobs",
@@ -294,5 +368,6 @@ def downgrade() -> None:
         "invitations", "organization_members", "organizations", "users",
     ]:
         op.drop_table(table)
+
     for enum in ["role", "serverstatus", "backuptype", "backupengine", "jobstatus", "alertseverity"]:
         op.execute(f"DROP TYPE IF EXISTS {enum}")

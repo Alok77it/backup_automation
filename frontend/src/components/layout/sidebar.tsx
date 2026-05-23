@@ -42,8 +42,8 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-[var(--sidebar-width)] flex-col border-r border-emerald-200/80 bg-white/95 backdrop-blur-xl dark:border-emerald-900/60 dark:bg-[#0d1f18]/95">
-      <div className="flex h-16 items-center gap-3 border-b border-emerald-100 px-5 dark:border-emerald-900/50">
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-[var(--sidebar-width)] flex-col border-r border-emerald-200/80 bg-white/95 backdrop-blur-xl">
+      <div className="flex h-16 items-center gap-3 border-b border-emerald-100 px-5">
         <motion.div
           animate={{ boxShadow: ["0 0 0px rgba(16,185,129,0)", "0 0 20px rgba(16,185,129,0.4)", "0 0 0px rgba(16,185,129,0)"] }}
           transition={{ duration: 2.5, repeat: Infinity }}
@@ -72,7 +72,7 @@ export function Sidebar() {
                   "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
                   active
                     ? "gradient-primary text-white shadow-lg shadow-emerald-500/25"
-                    : "text-muted-foreground hover:bg-emerald-50 hover:text-emerald-800 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-300"
+                    : "text-muted-foreground hover:bg-emerald-50 hover:text-emerald-800"
                 )}
               >
                 {active && (
@@ -89,14 +89,14 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-emerald-100 p-3 dark:border-emerald-900/50">
+      <div className="border-t border-emerald-100 p-3">
         <button
           type="button"
           onClick={() => {
             clearAuth();
             window.location.href = "/login";
           }}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground transition hover:bg-red-50 hover:text-red-600"
         >
           <LogOut className="h-4 w-4" />
           Sign out

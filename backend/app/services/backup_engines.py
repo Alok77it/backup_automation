@@ -37,61 +37,15 @@ def _run_command(cmd: list[str], env: dict | None = None, timeout: int = 86400) 
     return proc.returncode, output, proc.stderr
 
 
-def run_restic_backup(
-    repo_path: str,
-    source_paths: list[str],
-    password: str,
-    backup_type: str = "full",
-    tags: list[str] | None = None,
-) -> BackupResult:
-    start = time.monotonic()
-    repo = f"local:{repo_path}"
-    os.makedirs(repo_path, exist_ok=True)
-    env = {"RESTIC_PASSWORD": password}
-    init_code, init_out, _ = _run_command(["restic", "-r", repo, "init"], env=env)
-    if init_code not in (0, 1):
-        return BackupResult(False, 0, 0, 0, None, False, 0, init_out, "Restic init failed")
-
-    cmd = ["restic", "-r", repo, "backup", "--json"]
-    if tags:
-        for t in tags:
-            cmd.extend(["--tag", t])
-    if backup_type == "incremental":
-        cmd.append("--incremental")
-    cmd.extend(source_paths)
-
-    code, output, _ = _run_command(cmd, env=env)
-    duration = time.monotonic() - start
-    snapshot_id = None
-    bytes_added = 0
-    bytes_processed = 0
-    if '"snapshot_id"' in output or '"id"' in output:
-        import json
-
-        for line in output.splitlines():
-            if line.strip().startswith("{"):
-                try:
-                    data = json.loads(line)
-                    if "id" in data:
-                        snapshot_id = data["id"]
-                    if "data_added" in data:
-                        bytes_added = int(data["data_added"])
-                    if "total_files_processed" in data:
-                        bytes_processed = int(data.get("total_bytes_processed", bytes_added))
-                except json.JSONDecodeError:
-                    pass
-
-    return BackupResult(
-        success=code == 0,
-        bytes_processed=bytes_processed,
-        bytes_added=bytes_added,
-        duration_seconds=duration,
-        snapshot_id=snapshot_id,
-        checksum_valid=code == 0,
-        failed_chunks=0 if code == 0 else 1,
-        log_output=output,
-        error_message=None if code == 0 else output[-2000:],
-    )
+def _parse_rsync_bytes(output: str) -> int:
+    """Extract total transferred bytes from rsync --stats output."""
+    for line in output.splitlines():
+        if "Total file size" in line:
+            try:
+                return int(line.split()[-1].replace(",", ""))
+            except (ValueError, IndexError):
+                pass
+    return 0
 
 
 def run_rsync_backup(
@@ -100,52 +54,144 @@ def run_rsync_backup(
     backup_type: str = "full",
     compression: bool = True,
     remote: str | None = None,
+    ssh_key_path: str | None = None,
 ) -> BackupResult:
+    """
+    Back up one or more source_paths to target_path using rsync.
+
+    Compression (-z) compresses data during transfer only — files are stored
+    in their original format at the destination, so restore needs no
+    decompression step.
+
+    Args:
+        source_paths: List of paths to back up (on the remote server if remote is set).
+        target_path:  Local destination directory (inside Docker backup volume).
+        backup_type:  "full" | "incremental" — incremental uses --link-dest for
+                      hard-link deduplication against the previous run.
+        compression:  Always True in normal use; pass False only to benchmark.
+        remote:       "user@host" string for SSH remote source.
+        ssh_key_path: Path to SSH private key file (preferred over password auth).
+    """
     start = time.monotonic()
     os.makedirs(target_path, exist_ok=True)
-    total_added = 0
-    logs = []
+    total_bytes = 0
+    logs: list[str] = []
     success = True
 
+    # Build SSH options once
+    ssh_opts: list[str] = []
+    if remote:
+        ssh_args = "ssh -o StrictHostKeyChecking=no -o BatchMode=yes"
+        if ssh_key_path:
+            ssh_args += f" -i {ssh_key_path}"
+        ssh_opts = ["-e", ssh_args]
+
     for src in source_paths:
-        dest = os.path.join(target_path, Path(src).name)
-        cmd = ["rsync", "-a", "--stats"]
+        dest = os.path.join(target_path, Path(src).name or "root")
+        os.makedirs(dest, exist_ok=True)
+
+        cmd = ["rsync", "-a", "--stats", "--delete"]
         if compression:
             cmd.append("-z")
         if backup_type == "incremental":
-            cmd.extend(["--link-dest", target_path + "/latest"])
+            latest = os.path.join(target_path, "latest")
+            if os.path.exists(latest):
+                cmd.extend(["--link-dest", latest])
+        if ssh_opts:
+            cmd.extend(ssh_opts)
+
         if remote:
-            cmd.extend([f"{remote}:{src}", dest])
+            cmd.extend([f"{remote}:{src}/", dest + "/"])
         else:
             cmd.extend([src + "/", dest + "/"])
-        code, output, err = _run_command(cmd)
-        logs.append(output + err)
+
+        code, output, _ = _run_command(cmd)
+        logs.append(output)
         if code != 0:
             success = False
-        for line in output.splitlines():
-            if "Total file size" in line:
-                try:
-                    total_added += int(line.split()[-1].replace(",", ""))
-                except ValueError:
-                    pass
+        total_bytes += _parse_rsync_bytes(output)
 
+    # Update "latest" symlink for incremental backups
     latest_link = os.path.join(target_path, "latest")
     if success and source_paths:
         if os.path.islink(latest_link):
             os.unlink(latest_link)
-        os.symlink(os.path.join(target_path, Path(source_paths[0]).name), latest_link, target_is_directory=True)
+        first_dest = os.path.join(target_path, Path(source_paths[0]).name or "root")
+        try:
+            os.symlink(first_dest, latest_link, target_is_directory=True)
+        except OSError:
+            pass  # non-critical
 
     duration = time.monotonic() - start
     return BackupResult(
         success=success,
-        bytes_processed=total_added,
-        bytes_added=total_added,
+        bytes_processed=total_bytes,
+        bytes_added=total_bytes,
         duration_seconds=duration,
         snapshot_id=f"rsync-{int(start)}",
         checksum_valid=success,
-        failed_chunks=0 if success else 1,
+        failed_chunks=0 if success else len(source_paths),
         log_output="\n".join(logs),
         error_message=None if success else "\n".join(logs)[-2000:],
+    )
+
+
+def restore_rsync(
+    backup_path: str,
+    target_path: str,
+    compression: bool = True,
+    remote: str | None = None,
+    ssh_key_path: str | None = None,
+) -> BackupResult:
+    """
+    Restore files from backup_path back to target_path using rsync.
+
+    Because rsync -z only compresses during transfer (files at backup_path are
+    already in original format), this is simply an rsync copy back — no
+    decompression needed.
+
+    Args:
+        backup_path:  The directory that was created during backup (source of restore).
+        target_path:  Where files should be restored to (local path or remote path).
+        compression:  Compress data during the transfer (mirrors what was used at backup time).
+        remote:       "user@host" — push restored files to a remote server.
+        ssh_key_path: SSH private key for remote restore.
+    """
+    start = time.monotonic()
+    os.makedirs(target_path, exist_ok=True)
+
+    ssh_opts: list[str] = []
+    if remote:
+        ssh_args = "ssh -o StrictHostKeyChecking=no -o BatchMode=yes"
+        if ssh_key_path:
+            ssh_args += f" -i {ssh_key_path}"
+        ssh_opts = ["-e", ssh_args]
+
+    cmd = ["rsync", "-a", "--stats"]
+    if compression:
+        cmd.append("-z")
+    if ssh_opts:
+        cmd.extend(ssh_opts)
+
+    if remote:
+        cmd.extend([backup_path + "/", f"{remote}:{target_path}/"])
+    else:
+        cmd.extend([backup_path + "/", target_path + "/"])
+
+    code, output, _ = _run_command(cmd)
+    duration = time.monotonic() - start
+    total_bytes = _parse_rsync_bytes(output)
+
+    return BackupResult(
+        success=code == 0,
+        bytes_processed=total_bytes,
+        bytes_added=total_bytes,
+        duration_seconds=duration,
+        snapshot_id=f"restore-{int(start)}",
+        checksum_valid=code == 0,
+        failed_chunks=0 if code == 0 else 1,
+        log_output=output,
+        error_message=None if code == 0 else output[-2000:],
     )
 
 
@@ -154,6 +200,10 @@ def run_rclone_backup(
     target_path: str,
     config_extra: dict | None = None,
 ) -> BackupResult:
+    """
+    Sync a source (rclone remote or local path) to target_path using rclone.
+    Useful for cloud storage destinations (S3, GCS, B2, etc.).
+    """
     start = time.monotonic()
     os.makedirs(target_path, exist_ok=True)
     cmd = ["rclone", "sync", source, target_path, "--stats-one-line", "-v"]
@@ -162,6 +212,7 @@ def run_rclone_backup(
             cmd.extend([f"--{k}", str(v)])
     code, output, _ = _run_command(cmd)
     duration = time.monotonic() - start
+
     bytes_val = 0
     for line in output.splitlines():
         if "Transferred:" in line:
@@ -172,6 +223,7 @@ def run_rclone_backup(
                         bytes_val = int(parts[i - 1].replace(",", ""))
                     except ValueError:
                         pass
+
     return BackupResult(
         success=code == 0,
         bytes_processed=bytes_val,
@@ -185,49 +237,12 @@ def run_rclone_backup(
     )
 
 
-def run_borg_backup(
-    repo_path: str,
-    source_paths: list[str],
-    passphrase: str,
-    backup_name: str | None = None,
-) -> BackupResult:
-    start = time.monotonic()
-    os.makedirs(repo_path, exist_ok=True)
-    env = {"BORG_PASSPHRASE": passphrase}
-    init_code, init_out, _ = _run_command(["borg", "init", "--encryption=repokey", repo_path], env=env)
-    if init_code not in (0, 2):
-        return BackupResult(False, 0, 0, 0, None, False, 0, init_out, "Borg init failed")
-
-    archive = backup_name or f"backup-{int(start)}"
-    cmd = ["borg", "create", "--stats", f"{repo_path}::{archive}"]
-    cmd.extend(source_paths)
-    code, output, _ = _run_command(cmd, env=env)
-    duration = time.monotonic() - start
-    bytes_added = 0
-    for line in output.splitlines():
-        if "Original size" in line:
-            try:
-                bytes_added = int(line.split()[-2].replace(",", ""))
-            except (ValueError, IndexError):
-                pass
-    return BackupResult(
-        success=code == 0,
-        bytes_processed=bytes_added,
-        bytes_added=bytes_added,
-        duration_seconds=duration,
-        snapshot_id=archive,
-        checksum_valid=code == 0,
-        failed_chunks=0 if code == 0 else 1,
-        log_output=output,
-        error_message=None if code == 0 else output[-2000:],
-    )
-
-
 def run_database_backup(
     db_type: str,
     connection_string: str,
     target_file: str,
 ) -> BackupResult:
+    """Dump a database to a file using the appropriate CLI tool."""
     start = time.monotonic()
     os.makedirs(os.path.dirname(target_file), exist_ok=True)
     cmd: list[str] = []
@@ -263,9 +278,10 @@ def run_docker_backup(
     target_path: str,
     include_volumes: bool = True,
 ) -> BackupResult:
+    """Export Docker containers and their volumes to tar archives."""
     start = time.monotonic()
     os.makedirs(target_path, exist_ok=True)
-    logs = []
+    logs: list[str] = []
     success = True
     total_bytes = 0
 
@@ -284,29 +300,23 @@ def run_docker_backup(
             )
             if inspect_code == 0:
                 for vol in inspect_out.strip().split():
-                    if vol:
-                        vol_path = os.path.join(target_path, f"{cid}-vol-{vol}.tar")
-                        vc, vo, _ = _run_command(
-                            [
-                                "docker",
-                                "run",
-                                "--rm",
-                                "-v",
-                                f"{vol}:/data",
-                                "-v",
-                                f"{target_path}:/backup",
-                                "alpine",
-                                "tar",
-                                "cf",
-                                f"/backup/{cid}-vol-{vol}.tar",
-                                "/data",
-                            ]
-                        )
-                        logs.append(vo)
-                        if vc != 0:
-                            success = False
-                        elif os.path.exists(vol_path):
-                            total_bytes += os.path.getsize(vol_path)
+                    if not vol:
+                        continue
+                    vol_path = os.path.join(target_path, f"{cid}-vol-{vol}.tar")
+                    vc, vo, _ = _run_command(
+                        [
+                            "docker", "run", "--rm",
+                            "-v", f"{vol}:/data",
+                            "-v", f"{target_path}:/backup",
+                            "alpine",
+                            "tar", "cf", f"/backup/{cid}-vol-{vol}.tar", "/data",
+                        ]
+                    )
+                    logs.append(vo)
+                    if vc != 0:
+                        success = False
+                    elif os.path.exists(vol_path):
+                        total_bytes += os.path.getsize(vol_path)
 
     duration = time.monotonic() - start
     return BackupResult(
@@ -320,33 +330,3 @@ def run_docker_backup(
         log_output="\n".join(logs),
         error_message=None if success else "\n".join(logs)[-2000:],
     )
-
-
-def restore_restic(repo_path: str, snapshot_id: str, target_path: str, password: str) -> BackupResult:
-    start = time.monotonic()
-    repo = f"local:{repo_path}"
-    env = {"RESTIC_PASSWORD": password}
-    os.makedirs(target_path, exist_ok=True)
-    code, output, _ = _run_command(
-        ["restic", "-r", repo, "restore", snapshot_id, "--target", target_path],
-        env=env,
-    )
-    duration = time.monotonic() - start
-    return BackupResult(
-        success=code == 0,
-        bytes_processed=0,
-        bytes_added=0,
-        duration_seconds=duration,
-        snapshot_id=snapshot_id,
-        checksum_valid=code == 0,
-        failed_chunks=0,
-        log_output=output,
-        error_message=None if code == 0 else output[-2000:],
-    )
-
-
-def verify_restic_integrity(repo_path: str, password: str) -> tuple[bool, str]:
-    repo = f"local:{repo_path}"
-    env = {"RESTIC_PASSWORD": password}
-    code, output, _ = _run_command(["restic", "-r", repo, "check"], env=env, timeout=7200)
-    return code == 0, output

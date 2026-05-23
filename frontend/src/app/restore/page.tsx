@@ -154,13 +154,13 @@ export default function RestorePage() {
             </SelectField>
 
             {destMode === "same" && (
-              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-sm">
                 {selectedBackup?.server_name ? (
                   <p>
                     Restoring to <strong>{selectedBackup.server_name}</strong>
                   </p>
                 ) : (
-                  <p className="text-amber-700 dark:text-amber-400">This backup has no linked server — pick another destination mode.</p>
+                  <p className="text-amber-700">This backup has no linked server — pick another destination mode.</p>
                 )}
               </div>
             )}
@@ -192,7 +192,7 @@ export default function RestorePage() {
 
         {analysis && (
           <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }}>
-            <Card className="glass border-emerald-200 dark:border-emerald-800">
+            <Card className="glass border-emerald-200">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Shield className="h-5 w-5 text-emerald-600" /> AI Restore Analysis
@@ -200,20 +200,20 @@ export default function RestorePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center dark:border-emerald-900 dark:bg-emerald-950/40">
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center">
                     <p className="text-xs text-muted-foreground">Restore Confidence</p>
-                    <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{analysis.restore_confidence.toFixed(0)}%</p>
+                    <p className="text-2xl font-bold text-emerald-700">{analysis.restore_confidence.toFixed(0)}%</p>
                   </div>
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center dark:border-emerald-900 dark:bg-emerald-950/40">
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center">
                     <p className="text-xs text-muted-foreground">Est. Duration</p>
-                    <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
+                    <p className="text-2xl font-bold text-emerald-700">
                       {Math.round(analysis.estimated_duration_seconds / 60)}m
                     </p>
                   </div>
                 </div>
                 <Badge variant={analysis.risk_level === "low" ? "success" : "warning"}>Risk: {analysis.risk_level}</Badge>
                 {analysis.corruption_risks.map((r, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400">
+                  <div key={i} className="flex items-start gap-2 text-sm text-amber-700">
                     <AlertTriangle className="h-4 w-4 shrink-0" />
                     {r}
                   </div>
@@ -224,7 +224,7 @@ export default function RestorePage() {
                   </div>
                 ))}
                 {analysis.ai_summary && (
-                  <div className="rounded-xl border border-emerald-100 bg-white p-4 text-sm whitespace-pre-wrap dark:border-emerald-900 dark:bg-emerald-950/20">
+                  <div className="rounded-xl border border-emerald-100 bg-white p-4 text-sm whitespace-pre-wrap">
                     {analysis.ai_summary}
                   </div>
                 )}
@@ -240,7 +240,7 @@ export default function RestorePage() {
         </CardHeader>
         <CardContent>
           {jobs.map((j) => (
-            <div key={j.id} className="flex items-center justify-between border-b border-emerald-50 py-3 last:border-0 dark:border-emerald-900/50">
+            <div key={j.id} className="flex items-center justify-between border-b border-emerald-50 py-3 last:border-0">
               <div>
                 <p className="font-medium">{j.target_path}</p>
                 <p className="text-xs text-muted-foreground">{new Date(j.created_at).toLocaleString()}</p>
