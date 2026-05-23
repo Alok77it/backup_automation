@@ -48,6 +48,27 @@ def _parse_rsync_bytes(output: str) -> int:
     return 0
 
 
+def _build_ssh_opts(
+    ssh_key_path: str | None = None,
+    ssh_password: str | None = None,
+) -> tuple[list[str], dict]:
+    """
+    Return (rsync -e args, extra env vars) for SSH authentication.
+    Prefers key auth; falls back to sshpass for password auth.
+    """
+    base = "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15"
+    env: dict = {}
+    if ssh_key_path:
+        ssh_cmd = f"{base} -o BatchMode=yes -i {ssh_key_path}"
+    elif ssh_password:
+        # sshpass feeds the password to SSH non-interactively
+        ssh_cmd = f"sshpass -e {base} -o BatchMode=no"
+        env["SSHPASS"] = ssh_password
+    else:
+        ssh_cmd = f"{base} -o BatchMode=yes"
+    return ["-e", ssh_cmd], env
+
+
 def run_rsync_backup(
     source_paths: list[str],
     target_path: str,
@@ -55,6 +76,7 @@ def run_rsync_backup(
     compression: bool = True,
     remote: str | None = None,
     ssh_key_path: str | None = None,
+    ssh_password: str | None = None,
 ) -> BackupResult:
     """
     Back up one or more source_paths to target_path using rsync.
@@ -71,6 +93,7 @@ def run_rsync_backup(
         compression:  Always True in normal use; pass False only to benchmark.
         remote:       "user@host" string for SSH remote source.
         ssh_key_path: Path to SSH private key file (preferred over password auth).
+        ssh_password: Plaintext SSH password — used with sshpass when no key is set.
     """
     start = time.monotonic()
     os.makedirs(target_path, exist_ok=True)
@@ -80,11 +103,9 @@ def run_rsync_backup(
 
     # Build SSH options once
     ssh_opts: list[str] = []
+    ssh_env: dict = {}
     if remote:
-        ssh_args = "ssh -o StrictHostKeyChecking=no -o BatchMode=yes"
-        if ssh_key_path:
-            ssh_args += f" -i {ssh_key_path}"
-        ssh_opts = ["-e", ssh_args]
+        ssh_opts, ssh_env = _build_ssh_opts(ssh_key_path, ssh_password)
 
     for src in source_paths:
         dest = os.path.join(target_path, Path(src).name or "root")
@@ -105,7 +126,7 @@ def run_rsync_backup(
         else:
             cmd.extend([src + "/", dest + "/"])
 
-        code, output, _ = _run_command(cmd)
+        code, output, _ = _run_command(cmd, env=ssh_env or None)
         logs.append(output)
         if code != 0:
             success = False
@@ -142,6 +163,7 @@ def restore_rsync(
     compression: bool = True,
     remote: str | None = None,
     ssh_key_path: str | None = None,
+    ssh_password: str | None = None,
 ) -> BackupResult:
     """
     Restore files from backup_path back to target_path using rsync.
@@ -156,16 +178,15 @@ def restore_rsync(
         compression:  Compress data during the transfer (mirrors what was used at backup time).
         remote:       "user@host" — push restored files to a remote server.
         ssh_key_path: SSH private key for remote restore.
+        ssh_password: SSH password — used with sshpass when no key is set.
     """
     start = time.monotonic()
     os.makedirs(target_path, exist_ok=True)
 
     ssh_opts: list[str] = []
+    ssh_env: dict = {}
     if remote:
-        ssh_args = "ssh -o StrictHostKeyChecking=no -o BatchMode=yes"
-        if ssh_key_path:
-            ssh_args += f" -i {ssh_key_path}"
-        ssh_opts = ["-e", ssh_args]
+        ssh_opts, ssh_env = _build_ssh_opts(ssh_key_path, ssh_password)
 
     cmd = ["rsync", "-a", "--stats"]
     if compression:
@@ -178,7 +199,7 @@ def restore_rsync(
     else:
         cmd.extend([backup_path + "/", target_path + "/"])
 
-    code, output, _ = _run_command(cmd)
+    code, output, _ = _run_command(cmd, env=ssh_env or None)
     duration = time.monotonic() - start
     total_bytes = _parse_rsync_bytes(output)
 

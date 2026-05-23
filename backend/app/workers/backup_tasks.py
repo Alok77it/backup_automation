@@ -121,6 +121,7 @@ def execute_backup_run(self, run_id: str) -> dict:
                     backup.compression,
                     remote,
                     ssh_key_path,
+                    password,  # used by sshpass when no key is set
                 )
         finally:
             if ssh_key_path and os.path.exists(ssh_key_path):
@@ -200,8 +201,10 @@ def execute_restore_job(self, job_id: str) -> dict:
         server = session.get(Server, backup.server_id) if backup.server_id else None
         remote = None
         ssh_key_path = None
+        restore_password = None
         if server:
             private_key = decrypt_secret(server.encrypted_private_key) if server.encrypted_private_key else None
+            restore_password = decrypt_secret(server.encrypted_password) if server.encrypted_password else None
             if private_key:
                 import tempfile
                 kf = tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False)
@@ -226,6 +229,7 @@ def execute_restore_job(self, job_id: str) -> dict:
                 compression=backup.compression,
                 remote=remote,
                 ssh_key_path=ssh_key_path,
+                ssh_password=restore_password,
             )
         finally:
             if ssh_key_path and os.path.exists(ssh_key_path):
