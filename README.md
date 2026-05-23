@@ -244,6 +244,7 @@ cd "C:\path\to\main project"
 ```bash
 chmod +x deploy-production.sh
 ./deploy-production.sh
+docker exec -it bi-api alembic upgrade head
 ```
 
 **Optional overrides (detected automatically if omitted):**
