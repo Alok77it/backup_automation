@@ -1,11 +1,13 @@
 import os
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 
 from app.core.config import get_settings
-from app.core.dependencies import DbSession, OrgMembership, require_permission
+from app.core.dependencies import DbSession, require_permission
+from app.models.entities import OrganizationMember
 from app.models.entities import Backup, StorageUsage
 from app.schemas.resources import StorageAnalytics
 
@@ -16,7 +18,7 @@ settings = get_settings()
 @router.get("/analytics", response_model=StorageAnalytics)
 async def get_storage_analytics(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("backup:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("backup:read"))],
 ):
     org_id = membership.organization_id
     latest = await db.execute(

@@ -1,10 +1,12 @@
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
+from app.core.dependencies import DbSession, require_permission, verify_csrf
+from app.models.entities import OrganizationMember
 from app.core.security import encrypt_secret
 from app.models.entities import MetricSnapshot, Server, ServerStatus
 from app.schemas.resources import ServerConnectionTest, ServerCreate, ServerResponse, ServerUpdate
@@ -44,7 +46,7 @@ async def _server_to_response(db: AsyncSession, server: Server) -> ServerRespons
 @router.get("", response_model=list[ServerResponse])
 async def list_servers(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("server:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:read"))],
 ):
     result = await db.execute(
         select(Server).where(Server.organization_id == membership.organization_id).order_by(Server.created_at.desc())
@@ -58,7 +60,7 @@ async def create_server(
     request: Request,
     data: ServerCreate,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("server:write")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:write"))],
 ):
     server = Server(
         organization_id=membership.organization_id,
@@ -90,7 +92,7 @@ async def create_server(
 async def test_connection(
     server_id: uuid.UUID,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("server:write")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:write"))],
 ):
     result = await db.execute(
         select(Server).where(Server.id == server_id, Server.organization_id == membership.organization_id)
@@ -120,7 +122,7 @@ async def test_connection(
 async def trigger_metrics(
     server_id: uuid.UUID,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("server:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:read"))],
 ):
     result = await db.execute(
         select(Server).where(Server.id == server_id, Server.organization_id == membership.organization_id)
@@ -136,7 +138,7 @@ async def trigger_metrics(
 async def delete_server(
     server_id: uuid.UUID,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("server:delete")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:delete"))],
 ):
     result = await db.execute(
         select(Server).where(Server.id == server_id, Server.organization_id == membership.organization_id)

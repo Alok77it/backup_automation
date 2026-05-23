@@ -1,12 +1,14 @@
 import os
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
-from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
+from app.core.dependencies import DbSession, require_permission, verify_csrf
+from app.models.entities import OrganizationMember
 from app.models.entities import Backup, BackupRun, JobStatus
 from app.schemas.resources import BackupCreate, BackupResponse, BackupRunResponse
 from app.services.audit import log_audit
@@ -52,7 +54,7 @@ async def _backup_response(db, backup: Backup) -> BackupResponse:
 @router.get("", response_model=list[BackupResponse])
 async def list_backups(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("backup:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("backup:read"))],
 ):
     result = await db.execute(
         select(Backup).where(Backup.organization_id == membership.organization_id).order_by(Backup.created_at.desc())
@@ -66,7 +68,7 @@ async def create_backup(
     request: Request,
     data: BackupCreate,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("backup:write")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("backup:write"))],
 ):
     from app.models.entities import BackupEngine, BackupType
 
@@ -98,7 +100,7 @@ async def create_backup(
 async def run_backup(
     backup_id: uuid.UUID,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("backup:run")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("backup:run"))],
 ):
     result = await db.execute(
         select(Backup).where(Backup.id == backup_id, Backup.organization_id == membership.organization_id)
@@ -119,7 +121,7 @@ async def run_backup(
 async def list_runs(
     backup_id: uuid.UUID,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("backup:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("backup:read"))],
 ):
     result = await db.execute(
         select(BackupRun)
@@ -135,7 +137,7 @@ async def list_runs(
 async def delete_backup(
     backup_id: uuid.UUID,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("backup:delete")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("backup:delete"))],
 ):
     result = await db.execute(
         select(Backup).where(Backup.id == backup_id, Backup.organization_id == membership.organization_id)

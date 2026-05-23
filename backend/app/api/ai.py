@@ -1,9 +1,11 @@
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 
-from app.core.dependencies import CurrentUser, DbSession, OrgMembership, require_permission, verify_csrf
+from app.core.dependencies import CurrentUser, DbSession, require_permission, verify_csrf
+from app.models.entities import OrganizationMember
 from app.models.entities import AIConversation, AIConversationMessage, Alert, Backup, BackupRun, JobStatus, LogEntry, Server
 from app.schemas.resources import AIChatRequest, AIChatResponse, AIConversationResponse
 from app.services.ai_service import get_ai_response
@@ -56,7 +58,7 @@ async def chat(
     data: AIChatRequest,
     db: DbSession,
     user: CurrentUser,
-    membership: OrgMembership = Depends(require_permission("ai:use")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("ai:use"))],
 ):
     org_id = membership.organization_id
     context = await _build_context(db, org_id)
@@ -93,7 +95,7 @@ async def chat(
 async def list_conversations(
     db: DbSession,
     user: CurrentUser,
-    membership: OrgMembership = Depends(require_permission("ai:use")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("ai:use"))],
 ):
     result = await db.execute(
         select(AIConversation)
@@ -113,7 +115,7 @@ async def list_conversations(
 async def analyze_failure(
     run_id: uuid.UUID,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("ai:use")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("ai:use"))],
 ):
     from app.services.ai_service import analyze_backup_failure
 

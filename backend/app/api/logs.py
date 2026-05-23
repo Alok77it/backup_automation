@@ -1,7 +1,10 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import or_, select
 
-from app.core.dependencies import DbSession, OrgMembership, require_permission
+from app.core.dependencies import DbSession, require_permission
+from app.models.entities import OrganizationMember
 from app.models.entities import LogEntry
 from app.schemas.common import PaginatedResponse
 from app.schemas.resources import LogEntryResponse
@@ -13,7 +16,7 @@ router = APIRouter(prefix="/logs", tags=["logs"])
 @router.get("", response_model=PaginatedResponse[LogEntryResponse])
 async def search_logs(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("org:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("org:read"))],
     query: str | None = None,
     source: str | None = None,
     level: str | None = None,
@@ -43,7 +46,7 @@ async def search_logs(
 @router.post("/summarize")
 async def ai_summarize_logs(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("ai:use")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("ai:use"))],
     limit: int = 100,
 ):
     result = await db.execute(

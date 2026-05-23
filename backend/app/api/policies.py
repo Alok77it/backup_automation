@@ -1,9 +1,11 @@
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
-from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
+from app.core.dependencies import DbSession, require_permission, verify_csrf
+from app.models.entities import OrganizationMember
 from app.models.entities import BackupPolicy
 from app.schemas.resources import PolicyCreate, PolicyResponse
 
@@ -13,7 +15,7 @@ router = APIRouter(prefix="/policies", tags=["policies"])
 @router.get("", response_model=list[PolicyResponse])
 async def list_policies(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("policy:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("policy:read"))],
 ):
     result = await db.execute(
         select(BackupPolicy).where(BackupPolicy.organization_id == membership.organization_id)
@@ -25,7 +27,7 @@ async def list_policies(
 async def create_policy(
     data: PolicyCreate,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("policy:write")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("policy:write"))],
 ):
     policy = BackupPolicy(organization_id=membership.organization_id, **data.model_dump())
     db.add(policy)
@@ -38,7 +40,7 @@ async def update_policy(
     policy_id: uuid.UUID,
     data: PolicyCreate,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("policy:write")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("policy:write"))],
 ):
     result = await db.execute(
         select(BackupPolicy).where(
@@ -58,7 +60,7 @@ async def update_policy(
 async def delete_policy(
     policy_id: uuid.UUID,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("policy:write")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("policy:write"))],
 ):
     result = await db.execute(
         select(BackupPolicy).where(

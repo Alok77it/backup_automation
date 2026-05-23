@@ -1,6 +1,7 @@
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
@@ -8,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.dependencies import CurrentUser, DbSession, OrgMembership, require_permission, verify_csrf
-from app.models.entities import Invitation, Organization, OrganizationMember, Role, Team, TeamMember, User
+from app.models.entities import Invitation, Organization, OrganizationMember, Role, Team, User
 from app.schemas.resources import (
     AuditLogResponse,
     BillingInfo,
@@ -34,7 +35,7 @@ async def get_current_org(membership: OrgMembership):
 @router.get("/members", response_model=list[MemberResponse])
 async def list_members(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("org:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("org:read"))],
 ):
     result = await db.execute(
         select(OrganizationMember, User)
@@ -61,7 +62,7 @@ async def create_invitation(
     data: InvitationCreate,
     db: DbSession,
     user: CurrentUser,
-    membership: OrgMembership = Depends(require_permission("org:invite")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("org:invite"))],
 ):
     token = secrets.token_urlsafe(32)
     invitation = Invitation(
@@ -82,7 +83,7 @@ async def create_invitation(
 @router.get("/invitations", response_model=list[InvitationResponse])
 async def list_invitations(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("org:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("org:read"))],
 ):
     result = await db.execute(
         select(Invitation).where(Invitation.organization_id == membership.organization_id, Invitation.accepted == False)
@@ -94,7 +95,7 @@ async def list_invitations(
 async def create_team(
     data: TeamCreate,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("org:manage")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("org:manage"))],
 ):
     team = Team(organization_id=membership.organization_id, name=data.name, description=data.description)
     db.add(team)
@@ -105,7 +106,7 @@ async def create_team(
 @router.get("/teams", response_model=list[TeamResponse])
 async def list_teams(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("org:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("org:read"))],
 ):
     result = await db.execute(
         select(Team).where(Team.organization_id == membership.organization_id).options(selectinload(Team.members))
@@ -127,7 +128,7 @@ async def list_teams(
 @router.get("/audit-logs", response_model=list[AuditLogResponse])
 async def list_audit_logs(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("audit:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("audit:read"))],
     limit: int = 100,
 ):
     from app.models.entities import AuditLog
@@ -159,7 +160,7 @@ async def list_audit_logs(
 @router.get("/billing", response_model=BillingInfo)
 async def get_billing(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("org:billing")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("org:billing"))],
 ):
     from app.models.entities import Backup, Server, StorageUsage
 

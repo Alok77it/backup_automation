@@ -72,7 +72,12 @@ OrgMembership = Annotated[OrganizationMember, Depends(get_org_membership)]
 
 
 def require_permission(permission: str):
-    async def checker(membership: OrgMembership) -> OrganizationMember:
+    async def checker(
+        db: DbSession,
+        user: CurrentUser,
+        x_organization_id: Annotated[str | None, Header(alias="X-Organization-Id")] = None,
+    ) -> OrganizationMember:
+        membership = await get_org_membership(db, user, x_organization_id)
         if not has_permission(membership.role, permission):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
         return membership

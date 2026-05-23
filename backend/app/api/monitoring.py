@@ -1,10 +1,12 @@
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 
-from app.core.dependencies import DbSession, OrgMembership, require_permission
+from app.core.dependencies import DbSession, require_permission
+from app.models.entities import OrganizationMember
 from app.models.entities import BackupRun, MetricSnapshot
 from app.schemas.resources import MetricResponse
 
@@ -14,7 +16,7 @@ router = APIRouter(prefix="/monitoring", tags=["monitoring"])
 @router.get("/metrics")
 async def get_metrics(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("server:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:read"))],
     server_id: uuid.UUID | None = None,
     hours: int = 24,
 ):
@@ -32,7 +34,7 @@ async def get_metrics(
 @router.get("/throughput")
 async def get_throughput(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("backup:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("backup:read"))],
     hours: int = 24,
 ):
     from app.models.entities import Backup
@@ -60,7 +62,7 @@ async def get_throughput(
 @router.get("/aggregated")
 async def get_aggregated_metrics(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("server:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:read"))],
 ):
     result = await db.execute(
         select(MetricSnapshot)

@@ -1,10 +1,12 @@
 import os
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
-from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
+from app.core.dependencies import DbSession, require_permission, verify_csrf
+from app.models.entities import OrganizationMember
 from app.models.entities import Backup, BackupRun, JobStatus, RestoreJob
 from app.schemas.resources import RestoreAnalysis, RestoreCreate, RestoreJobResponse
 from app.services.ai_service import get_ai_response
@@ -19,7 +21,7 @@ router = APIRouter(prefix="/restore", tags=["restore"])
 async def analyze_restore(
     data: RestoreCreate,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("restore:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("restore:read"))],
 ):
     result = await db.execute(
         select(Backup).where(Backup.id == data.backup_id, Backup.organization_id == membership.organization_id)
@@ -73,7 +75,7 @@ async def analyze_restore(
 async def create_restore(
     data: RestoreCreate,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("restore:execute")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("restore:execute"))],
 ):
     result = await db.execute(
         select(Backup).where(Backup.id == data.backup_id, Backup.organization_id == membership.organization_id)
@@ -111,7 +113,7 @@ async def create_restore(
 @router.get("/jobs", response_model=list[RestoreJobResponse])
 async def list_restore_jobs(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("restore:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("restore:read"))],
 ):
     result = await db.execute(
         select(RestoreJob)

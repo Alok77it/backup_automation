@@ -1,4 +1,5 @@
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, update
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 @router.get("", response_model=list[AlertResponse])
 async def list_alerts(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("alert:read")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("alert:read"))],
     unresolved_only: bool = False,
 ):
     query = select(Alert).where(Alert.organization_id == membership.organization_id)
@@ -27,7 +28,7 @@ async def list_alerts(
 async def mark_read(
     alert_id: uuid.UUID,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("alert:manage")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("alert:manage"))],
 ):
     result = await db.execute(
         select(Alert).where(Alert.id == alert_id, Alert.organization_id == membership.organization_id)
@@ -44,7 +45,7 @@ async def mark_read(
 async def resolve_alert(
     alert_id: uuid.UUID,
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("alert:manage")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("alert:manage"))],
 ):
     result = await db.execute(
         select(Alert).where(Alert.id == alert_id, Alert.organization_id == membership.organization_id)
@@ -60,7 +61,7 @@ async def resolve_alert(
 @router.post("/mark-all-read", dependencies=[Depends(verify_csrf)])
 async def mark_all_read(
     db: DbSession,
-    membership: OrgMembership = Depends(require_permission("alert:manage")),
+    membership: Annotated[OrganizationMember, Depends(require_permission("alert:manage"))],
 ):
     await db.execute(
         update(Alert)
