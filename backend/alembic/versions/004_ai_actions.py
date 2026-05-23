@@ -18,7 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Create the AIActionStatus enum type
+    # Create the AIActionStatus enum type only if it doesn't already exist
     aiactionstatus = postgresql.ENUM(
         "pending_approval",
         "approved",
@@ -27,8 +27,9 @@ def upgrade() -> None:
         "executed",
         "failed",
         name="aiactionstatus",
+        create_type=False,  # we handle creation manually below
     )
-    aiactionstatus.create(op.get_bind())
+    aiactionstatus.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "ai_actions",
@@ -39,7 +40,9 @@ def upgrade() -> None:
         sa.Column("approved_by_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
             "status",
-            sa.Enum(
+            # create_type=False so SQLAlchemy doesn't try to CREATE TYPE again
+            # inside create_table — we already handled it above
+            postgresql.ENUM(
                 "pending_approval",
                 "approved",
                 "rejected",
@@ -47,6 +50,7 @@ def upgrade() -> None:
                 "executed",
                 "failed",
                 name="aiactionstatus",
+                create_type=False,
             ),
             nullable=False,
             server_default="pending_approval",
@@ -89,4 +93,4 @@ def downgrade() -> None:
     op.drop_index("ix_ai_actions_organization_id", table_name="ai_actions")
     op.drop_index("ix_ai_actions_org_status", table_name="ai_actions")
     op.drop_table("ai_actions")
-    op.execute("DROP TYPE IF EXISTS aiactionstatus")
+    postgresql.ENUM(name="aiactionstatus", create_type=False).drop(op.get_bind(), checkfirst=True)
