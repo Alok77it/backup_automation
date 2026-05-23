@@ -701,3 +701,55 @@ Proprietary — All rights reserved.
 ## Support
 
 For issues, check logs with `docker compose logs -f` and refer to the troubleshooting section above.
+
+
+Login ke baad — dashboard pages
+Page	Link
+Dashboard
+http://YOUR_SERVER/dashboard
+Infrastructure (servers)
+http://YOUR_SERVER/infrastructure
+Backups
+http://YOUR_SERVER/backups
+Restore
+http://YOUR_SERVER/restore
+Monitoring
+http://YOUR_SERVER/monitoring
+AI Intelligence
+http://YOUR_SERVER/ai
+Logs
+http://YOUR_SERVER/logs
+Policies
+http://YOUR_SERVER/policies
+Alerts
+http://YOUR_SERVER/alerts
+Storage
+http://YOUR_SERVER/storage
+Organizations
+http://YOUR_SERVER/organizations
+Billing
+http://YOUR_SERVER/billing
+Settings
+http://YOUR_SERVER/settings
+Root http://YOUR_SERVER bhi frontend par jata hai; logged-in nahi ho to aksar login par redirect hota hai.
+
+API / health (check ke liye)
+Kaam	Link
+Health check
+http://YOUR_SERVER/api/health
+API docs (Swagger)
+http://YOUR_SERVER/api/docs
+API direct (debug, port 8000)
+http://YOUR_SERVER:8000/api/health
+Browser se UI ke liye port 80 (http://YOUR_SERVER) best hai; /api Nginx se backend ko jata hai.
+
+Extra services
+Service	Link
+Prometheus (metrics)
+http://YOUR_SERVER:9090
+Typical flow
+http://YOUR_SERVER/signup → account + organization
+Auto redirect → http://YOUR_SERVER/dashboard
+Infrastructure → server add
+Backups → job create
+Restore / Monitoring / AI — sidebar se
