@@ -91,12 +91,12 @@ class ServerStatus(str, enum.Enum):
 
 
 # SQLAlchemy Enum type objects — reused in mapped_column() below
-_server_status_enum    = _make_enum(ServerStatus,    "serverstatus")
-_backup_type_enum      = _make_enum(BackupType,      "backuptype")
-_backup_engine_enum    = _make_enum(BackupEngine,    "backupengine")
-_job_status_enum       = _make_enum(JobStatus,       "jobstatus")
-_alert_severity_enum   = _make_enum(AlertSeverity,   "alertseverity")
-_ai_action_status_enum = _make_enum(AIActionStatus,  "aiactionstatus")
+_server_status_enum  = _make_enum(ServerStatus,  "serverstatus")
+_backup_type_enum    = _make_enum(BackupType,    "backuptype")
+_backup_engine_enum  = _make_enum(BackupEngine,  "backupengine")
+_job_status_enum     = _make_enum(JobStatus,     "jobstatus")
+_alert_severity_enum = _make_enum(AlertSeverity, "alertseverity")
+# AIActionStatus uses String(30) in the DB — no native PG enum needed
 
 
 def _uuid() -> uuid.UUID:
@@ -460,7 +460,7 @@ class AIAction(Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     status: Mapped[AIActionStatus] = mapped_column(
-        _ai_action_status_enum, default=AIActionStatus.PENDING_APPROVAL
+        String(30), default=AIActionStatus.PENDING_APPROVAL
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
