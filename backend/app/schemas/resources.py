@@ -2,7 +2,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.role_utils import normalize_role
 
 
 class OrganizationResponse(BaseModel):
@@ -28,6 +30,11 @@ class MemberResponse(BaseModel):
 class InvitationCreate(BaseModel):
     email: str
     role: str = "viewer"
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        return normalize_role(v).value
 
 
 class InvitationResponse(BaseModel):

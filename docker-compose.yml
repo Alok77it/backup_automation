@@ -58,6 +58,8 @@ services:
       timeout: 10s
       retries: 5
       start_period: 40s
+    ports:
+      - "8000:8000"
     networks:
       - bi-network
 
@@ -126,6 +128,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
     depends_on:
       - api
       - frontend

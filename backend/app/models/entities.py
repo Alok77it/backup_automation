@@ -29,6 +29,15 @@ class Role(str, enum.Enum):
     VIEWER = "viewer"
 
 
+# PostgreSQL enum uses lowercase values (owner), not Python names (OWNER)
+_role_enum = Enum(
+    Role,
+    name="role",
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    native_enum=True,
+)
+
+
 class BackupType(str, enum.Enum):
     FULL = "full"
     INCREMENTAL = "incremental"
@@ -114,11 +123,7 @@ class OrganizationMember(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"))
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-<<<<<<< HEAD
-    role: Mapped[Role] = mapped_column(Enum(Role), default=Role.VIEWER)
-=======
-    role: Mapped[Role] = mapped_column(Enum(Role, name="role", native_enum=True), default=Role.VIEWER, nullable=False)
->>>>>>> 4fc4a62 (initial commit)
+    role: Mapped[Role] = mapped_column(_role_enum, default=Role.VIEWER, nullable=False)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     organization: Mapped["Organization"] = relationship(back_populates="members")
@@ -131,11 +136,7 @@ class Invitation(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"))
     email: Mapped[str] = mapped_column(String(255), nullable=False)
-<<<<<<< HEAD
-    role: Mapped[Role] = mapped_column(Enum(Role), default=Role.VIEWER)
-=======
-    role: Mapped[Role] = mapped_column(Enum(Role, name="role", native_enum=True), default=Role.VIEWER, nullable=False)
->>>>>>> 4fc4a62 (initial commit)
+    role: Mapped[Role] = mapped_column(_role_enum, default=Role.VIEWER, nullable=False)
     token: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     invited_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     accepted: Mapped[bool] = mapped_column(Boolean, default=False)
