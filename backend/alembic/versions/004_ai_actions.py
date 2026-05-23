@@ -18,19 +18,24 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Create the AIActionStatus enum type only if it doesn't already exist
-    aiactionstatus = postgresql.ENUM(
-        "pending_approval",
-        "approved",
-        "rejected",
-        "executing",
-        "executed",
-        "failed",
-        name="aiactionstatus",
-        create_type=False,  # we handle creation manually below
-    )
-    aiactionstatus.create(op.get_bind(), checkfirst=True)
+    # Create enum type safely — DO block silently skips if it already exists.
+    # We intentionally avoid using SQLAlchemy's ENUM() inside create_table
+    # because asyncpg fires _on_table_create and tries to CREATE TYPE again
+    # regardless of create_type=False, causing DuplicateObjectError.
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE aiactionstatus AS ENUM (
+                'pending_approval', 'approved', 'rejected',
+                'executing', 'executed', 'failed'
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
 
+    # Use sa.String for the status column so create_table never touches the
+    # enum type. The column will still hold the correct varchar values and the
+    # ORM maps it to the Python enum via _make_enum() at the application level.
     op.create_table(
         "ai_actions",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -40,18 +45,7 @@ def upgrade() -> None:
         sa.Column("approved_by_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
             "status",
-            # create_type=False so SQLAlchemy doesn't try to CREATE TYPE again
-            # inside create_table — we already handled it above
-            postgresql.ENUM(
-                "pending_approval",
-                "approved",
-                "rejected",
-                "executing",
-                "executed",
-                "failed",
-                name="aiactionstatus",
-                create_type=False,
-            ),
+            sa.String(30),
             nullable=False,
             server_default="pending_approval",
         ),
@@ -81,6 +75,14 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["server_id"], ["servers.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
+
+    # Now cast the varchar column to the proper enum type
+    op.execute("""
+        ALTER TABLE ai_actions
+            ALTER COLUMN status TYPE aiactionstatus
+            USING status::aiactionstatus;
+    """)
+
     op.create_index(
         "ix_ai_actions_org_status", "ai_actions", ["organization_id", "status"]
     )
@@ -93,4 +95,4 @@ def downgrade() -> None:
     op.drop_index("ix_ai_actions_organization_id", table_name="ai_actions")
     op.drop_index("ix_ai_actions_org_status", table_name="ai_actions")
     op.drop_table("ai_actions")
-    postgresql.ENUM(name="aiactionstatus", create_type=False).drop(op.get_bind(), checkfirst=True)
+    op.execute("DROP TYPE IF EXISTS aiactionstatus")
