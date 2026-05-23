@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     DateTime,
     Enum,
@@ -267,8 +268,8 @@ class BackupRun(Base):
     status: Mapped[JobStatus] = mapped_column(_job_status_enum, default=JobStatus.PENDING)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    bytes_processed: Mapped[int] = mapped_column(Integer, default=0)
-    bytes_added: Mapped[int] = mapped_column(Integer, default=0)
+    bytes_processed: Mapped[int] = mapped_column(BigInteger, default=0)
+    bytes_added: Mapped[int] = mapped_column(BigInteger, default=0)
     duration_seconds: Mapped[float | None] = mapped_column(Float)
     checksum_valid: Mapped[bool | None] = mapped_column(Boolean)
     failed_chunks: Mapped[int] = mapped_column(Integer, default=0)
@@ -366,10 +367,10 @@ class StorageUsage(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    total_bytes: Mapped[int] = mapped_column(Integer, default=0)
-    used_bytes: Mapped[int] = mapped_column(Integer, default=0)
-    compressed_bytes: Mapped[int] = mapped_column(Integer, default=0)
-    redundant_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    total_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    compressed_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    redundant_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     backup_count: Mapped[int] = mapped_column(Integer, default=0)
     compression_ratio: Mapped[float] = mapped_column(Float, default=1.0)
 
