@@ -28,6 +28,8 @@ interface Backup {
   last_run_status: string | null;
   server_name: string | null;
   server_id: string | null;
+  destination_server_id: string | null;
+  destination_server_name: string | null;
   schedule_cron: string | null;
 }
 
@@ -43,6 +45,7 @@ export default function BackupsPage() {
   const [form, setForm] = useState({
     name: "",
     server_id: "",
+    destination_server_id: "",
     backup_type: "full",
     engine: "rsync",
     source_paths: "/var/www",
@@ -72,6 +75,7 @@ export default function BackupsPage() {
         body: JSON.stringify({
           name: form.name,
           server_id: form.server_id || null,
+          destination_server_id: form.destination_server_id || null,
           backup_type: form.backup_type,
           engine: form.engine,
           source_paths: form.source_paths.split(",").map((s) => s.trim()).filter(Boolean),
@@ -86,6 +90,7 @@ export default function BackupsPage() {
       setForm({
         name: "",
         server_id: "",
+        destination_server_id: "",
         backup_type: "full",
         engine: "rsync",
         source_paths: "/var/www",
@@ -170,6 +175,20 @@ export default function BackupsPage() {
                     onChange={(e) => setForm({ ...form, server_id: e.target.value })}
                   >
                     <option value="">No server (local paths only)</option>
+                    {servers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.hostname})
+                      </option>
+                    ))}
+                  </SelectField>
+
+                  <SelectField
+                    label="Destination server (optional)"
+                    hint="Push backup to this server after storing locally. Leave blank to keep on this server only."
+                    value={form.destination_server_id}
+                    onChange={(e) => setForm({ ...form, destination_server_id: e.target.value })}
+                  >
+                    <option value="">Store on this server only (/opt/backups)</option>
                     {servers.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name} ({s.hostname})
@@ -347,10 +366,15 @@ export default function BackupsPage() {
                           )) || <p className="text-muted-foreground">None configured</p>}
                         </div>
                         <div>
-                          <p className="font-semibold text-emerald-700 mb-1">Destination path</p>
+                          <p className="font-semibold text-emerald-700 mb-1">Storage</p>
                           <p className="font-mono text-xs text-gray-600 bg-white rounded px-2 py-1 border border-emerald-100">
-                            {b.target_path || "Auto (default storage)"}
+                            {b.target_path || "/opt/backups (this server)"}
                           </p>
+                          {b.destination_server_name && (
+                            <p className="text-xs text-emerald-700 mt-1 font-medium">
+                              → Also pushed to: <strong>{b.destination_server_name}</strong>
+                            </p>
+                          )}
                         </div>
                         <div>
                           <p className="font-semibold text-emerald-700 mb-1">Schedule</p>

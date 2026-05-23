@@ -45,7 +45,7 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
     volumes:
-      - backup_data:/data/backups
+      - /opt/backups:/data/backups
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
@@ -75,7 +75,7 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
     volumes:
-      - backup_data:/data/backups
+      - /opt/backups:/data/backups
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - api
@@ -167,7 +167,6 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  backup_data:
   prometheus_data:
 
 networks:

@@ -127,6 +127,37 @@ def execute_backup_run(self, run_id: str) -> dict:
             if ssh_key_path and os.path.exists(ssh_key_path):
                 os.unlink(ssh_key_path)
 
+        # ── Push to destination server if configured ──────────────────────────
+        if result and result.success and backup.destination_server_id:
+            dest_server = session.get(Server, backup.destination_server_id)
+            if dest_server:
+                dest_password = decrypt_secret(dest_server.encrypted_password) if dest_server.encrypted_password else None
+                dest_private_key = decrypt_secret(dest_server.encrypted_private_key) if dest_server.encrypted_private_key else None
+                dest_remote = f"{dest_server.username}@{dest_server.hostname}"
+                dest_key_path = None
+                if dest_private_key:
+                    import tempfile as _tf
+                    dkf = _tf.NamedTemporaryFile(mode="w", suffix=".pem", delete=False)
+                    dkf.write(dest_private_key)
+                    dkf.close()
+                    os.chmod(dkf.name, 0o600)
+                    dest_key_path = dkf.name
+                try:
+                    push_result = restore_rsync(
+                        target,
+                        backup.target_path or target,
+                        compression=backup.compression,
+                        remote=dest_remote,
+                        ssh_key_path=dest_key_path,
+                        ssh_password=dest_password,
+                    )
+                    if not push_result.success:
+                        logger.warning("Destination push failed: %s", push_result.error_message)
+                        result = push_result  # mark overall as failed if push failed
+                finally:
+                    if dest_key_path and os.path.exists(dest_key_path):
+                        os.unlink(dest_key_path)
+
         run.status = JobStatus.COMPLETED if result.success else JobStatus.FAILED
         run.completed_at = datetime.now(timezone.utc)
         run.bytes_processed = result.bytes_processed

@@ -110,6 +110,7 @@ class ServerConnectionTest(BaseModel):
 class BackupCreate(BaseModel):
     name: str
     server_id: uuid.UUID | None = None
+    destination_server_id: uuid.UUID | None = None
     policy_id: uuid.UUID | None = None
     backup_type: str
     engine: str = "rsync"
@@ -136,6 +137,8 @@ class BackupResponse(BaseModel):
     corruption_probability: float
     server_id: uuid.UUID | None
     server_name: str | None = None
+    destination_server_id: uuid.UUID | None = None
+    destination_server_name: str | None = None
     created_at: datetime
     last_run_status: str | None = None
     last_run_at: datetime | None = None
