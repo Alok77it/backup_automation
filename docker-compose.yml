@@ -1,0 +1,165 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-backupintel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-backupintel_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-backup_intelligence}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-backupintel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bi-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: bi-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bi-network
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bi-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-backupintel}:${POSTGRES_PASSWORD:-backupintel_secret}@postgres:5432/${POSTGRES_DB:-backup_intelligence}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    volumes:
+      - backup_data:/data/backups
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - bi-network
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    container_name: bi-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-backupintel}:${POSTGRES_PASSWORD:-backupintel_secret}@postgres:5432/${POSTGRES_DB:-backup_intelligence}
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    volumes:
+      - backup_data:/data/backups
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - api
+      - redis
+    networks:
+      - bi-network
+
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    container_name: bi-beat
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-backupintel}:${POSTGRES_PASSWORD:-backupintel_secret}@postgres:5432/${POSTGRES_DB:-backup_intelligence}
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      - redis
+      - worker
+    networks:
+      - bi-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bi-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: /api
+    depends_on:
+      - api
+    networks:
+      - bi-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: bi-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - bi-network
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: bi-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - bi-network
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bi-migrate
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-backupintel}:${POSTGRES_PASSWORD:-backupintel_secret}@postgres:5432/${POSTGRES_DB:-backup_intelligence}
+    command: alembic upgrade head
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bi-network
+    profiles:
+      - migrate
+
+volumes:
+  postgres_data:
+  redis_data:
+  backup_data:
+  prometheus_data:
+
+networks:
+  bi-network:
+    driver: bridge
