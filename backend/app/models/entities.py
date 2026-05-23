@@ -199,7 +199,8 @@ class Server(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     organization: Mapped["Organization"] = relationship(back_populates="servers")
-    backups: Mapped[list["Backup"]] = relationship(back_populates="server")
+    backups: Mapped[list["Backup"]] = relationship(back_populates="server", foreign_keys="Backup.server_id")
+    destination_backups: Mapped[list["Backup"]] = relationship(back_populates="destination_server", foreign_keys="Backup.destination_server_id")
     metrics: Mapped[list["MetricSnapshot"]] = relationship(back_populates="server")
 
 
@@ -250,7 +251,8 @@ class Backup(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     organization: Mapped["Organization"] = relationship(back_populates="backups")
-    server: Mapped["Server | None"] = relationship(back_populates="backups")
+    server: Mapped["Server | None"] = relationship(back_populates="backups", foreign_keys=[server_id])
+    destination_server: Mapped["Server | None"] = relationship(back_populates="destination_backups", foreign_keys=[destination_server_id])
     policy: Mapped["BackupPolicy | None"] = relationship(back_populates="backups")
     runs: Mapped[list["BackupRun"]] = relationship(back_populates="backup")
     restore_jobs: Mapped[list["RestoreJob"]] = relationship(back_populates="backup")
