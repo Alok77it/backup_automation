@@ -2,61 +2,211 @@
 
 **AI-Powered Backup & Recovery Intelligence SaaS Platform**
 
-Enterprise-grade platform for connecting servers, creating backups, restoring data, monitoring infrastructure, managing policies, and using AI for infrastructure troubleshooting — fully self-hosted on a single server.
-
----
-
-## Table of Contents
-
-1. [Project Overview](#1-project-overview)
-2. [Architecture](#2-architecture)
-3. [Folder Structure](#3-folder-structure)
-4. [Environment Variables](#4-environment-variables)
-5. [Local Development Setup](#5-local-development-setup)
-6. [Production Deployment](#6-production-deployment)
-7. [Docker Installation](#7-docker-installation)
-8. [PostgreSQL Setup](#8-postgresql-setup)
-9. [Redis Setup](#9-redis-setup)
-10. [Running Migrations](#10-running-migrations)
-11. [Starting Workers](#11-starting-workers)
-12. [Starting Frontend & Backend](#12-starting-frontend--backend)
-13. [Nginx Setup](#13-nginx-setup)
-14. [SSL Setup](#14-ssl-setup)
-15. [Backup Engines](#15-backup-engines)
-16. [AI Layer](#16-ai-layer)
-17. [Monitoring](#17-monitoring)
-18. [Security](#18-security)
-19. [Scaling Guide](#19-scaling-guide)
-20. [Troubleshooting](#20-troubleshooting)
-21. [Common Errors](#21-common-errors)
-22. [Health Checks](#22-health-checks)
-23. [Logs Management](#23-logs-management)
-24. [Restore Testing](#24-restore-testing)
-25. [Upgrade Instructions](#25-upgrade-instructions)
-26. [Commands Reference](#26-commands-reference)
-27. [Deployment Checklist](#27-deployment-checklist)
-
----
-
-## 1. Project Overview
-
-Backup Intelligence is a multi-tenant SaaS platform that provides:
-
-- **Infrastructure management** — SSH-connected Linux servers with live CPU/RAM/Disk/IO metrics
-- **Backup orchestration** — Restic, Rsync, Rclone, BorgBackup engines
-- **Database backups** — PostgreSQL, MySQL, MongoDB, Redis
-- **Docker backups** — Container export and volume backup
-- **Restore Center** — AI-analyzed restore with confidence scoring
-- **AI Intelligence** — Claude/OpenAI-powered assistant (optional API keys)
-- **Health Engine** — Backup health score, corruption probability, risk levels
-- **Alerts** — In-app and email notifications
-- **RBAC** — Owner, Admin, Operator, Viewer roles
+Self-hosted platform to connect Linux servers over SSH, run backups (Restic, Rsync, Rclone, Borg), restore data with AI-assisted analysis, monitor infrastructure, and manage policies — on a single server with Docker Compose.
 
 **Stack:** Next.js · FastAPI · PostgreSQL · Redis · Celery · Prometheus · Nginx · Docker Compose
 
 ---
 
-## 2. Architecture
+## Table of Contents
+
+1. [Quick Start](#1-quick-start)
+2. [URLs After Setup](#2-urls-after-setup)
+3. [Using the Dashboard](#3-using-the-dashboard)
+4. [Project Overview](#4-project-overview)
+5. [Architecture](#5-architecture)
+6. [Folder Structure](#6-folder-structure)
+7. [Environment Variables](#7-environment-variables)
+8. [Production Deployment](#8-production-deployment)
+9. [Local Development](#9-local-development)
+10. [Database, Redis & Migrations](#10-database-redis--migrations)
+11. [Workers & Scheduled Tasks](#11-workers--scheduled-tasks)
+12. [Nginx & SSL](#12-nginx--ssl)
+13. [Backup Engines](#13-backup-engines)
+14. [AI Layer](#14-ai-layer)
+15. [Monitoring](#15-monitoring)
+16. [Security & RBAC](#16-security--rbac)
+17. [Troubleshooting](#17-troubleshooting)
+18. [Commands Reference](#18-commands-reference)
+19. [Deployment Checklist](#19-deployment-checklist)
+
+---
+
+## 1. Quick Start
+
+### Prerequisites
+
+- Docker & Docker Compose v2
+- 4 GB+ RAM recommended
+- Ports **80** (web), **8000** (API debug, optional), **9090** (Prometheus, optional)
+
+### One-command deploy
+
+**Windows (PowerShell):**
+
+```powershell
+cd "C:\path\to\main project"
+.\deploy-production.ps1
+```
+
+**Linux / macOS / WSL:**
+
+```bash
+chmod +x deploy-production.sh
+./deploy-production.sh
+```
+
+The script will:
+
+- Create or update `.env` (secrets, DB password, host URL)
+- Build Docker images
+- Run database migrations
+- Start all services (API, frontend, nginx, postgres, redis, worker, beat, prometheus)
+
+### First login
+
+1. Open **`http://YOUR_SERVER/signup`** (replace `YOUR_SERVER` with your machine IP, domain, or `localhost`)
+2. Create account + organization
+3. You are redirected to the **Dashboard**
+4. Go to **Infrastructure** → add a Linux server → **Connect Server**
+5. Go to **Backups** → **New Backup** → select **target server** → create job → run backup
+
+---
+
+## 2. URLs After Setup
+
+Replace **`YOUR_SERVER`** with:
+
+- **Same machine:** `localhost` or `127.0.0.1`
+- **Remote VPS:** public IP (e.g. `203.0.113.10`) or domain (e.g. `backup.company.com`)
+- **After SSL:** `https://yourdomain.com`
+
+Default entry point is **port 80** via Nginx (not port 3000 in production).
+
+### Auth pages (before login)
+
+| Page | URL |
+|------|-----|
+| **Home / app** | `http://YOUR_SERVER` |
+| **Login** | `http://YOUR_SERVER/login` |
+| **Sign up** | `http://YOUR_SERVER/signup` |
+| **Forgot password** | `http://YOUR_SERVER/forgot-password` |
+| **Reset password** | `http://YOUR_SERVER/reset-password?token=...` |
+
+### Dashboard pages (after login)
+
+| Page | URL |
+|------|-----|
+| Dashboard | `http://YOUR_SERVER/dashboard` |
+| Infrastructure (servers) | `http://YOUR_SERVER/infrastructure` |
+| Backups | `http://YOUR_SERVER/backups` |
+| Restore Center | `http://YOUR_SERVER/restore` |
+| Monitoring | `http://YOUR_SERVER/monitoring` |
+| AI Intelligence | `http://YOUR_SERVER/ai` |
+| Logs | `http://YOUR_SERVER/logs` |
+| Policies | `http://YOUR_SERVER/policies` |
+| Alerts | `http://YOUR_SERVER/alerts` |
+| Storage | `http://YOUR_SERVER/storage` |
+| Organizations | `http://YOUR_SERVER/organizations` |
+| Billing | `http://YOUR_SERVER/billing` |
+| Settings | `http://YOUR_SERVER/settings` |
+
+### API & health (for checks and integrations)
+
+| Endpoint | URL |
+|----------|-----|
+| Health check | `http://YOUR_SERVER/api/health` |
+| OpenAPI / Swagger | `http://YOUR_SERVER/api/docs` |
+| Prometheus metrics (API) | `http://YOUR_SERVER/metrics` |
+| API direct (debug, host port) | `http://YOUR_SERVER:8000/api/health` |
+
+### Other services
+
+| Service | URL |
+|---------|-----|
+| **Prometheus UI** | `http://YOUR_SERVER:9090` |
+
+### Routing summary
+
+```
+http://YOUR_SERVER/          → Next.js UI (login, dashboard, all pages)
+http://YOUR_SERVER/api/      → FastAPI backend
+http://YOUR_SERVER:8000/     → API direct (optional, exposed in docker-compose)
+http://YOUR_SERVER:9090/     → Prometheus
+```
+
+---
+
+## 3. Using the Dashboard
+
+### Infrastructure
+
+1. Open **Infrastructure** → **Add Server**
+2. Enter name, hostname/IP, port (22), username, SSH password
+3. Click **Connect Server**
+4. Use **Test** to verify SSH; **Metrics** to collect CPU/RAM/Disk
+
+If a button fails, read the red error banner (e.g. CSRF, SSH, permissions).
+
+### Backups
+
+1. Open **Backups** → **New Backup**
+2. Choose **Target server** (where source data lives)
+3. Set backup type, engine (restic/rsync/rclone/borg), source paths, cron schedule
+4. Click **Create Backup**, then **Run** (play icon) on a job
+
+Backup storage on the host: Docker volume → `/data/backups/{org_id}/{backup_id}/`
+
+### Restore Center
+
+1. Select a **backup**
+2. Choose **destination**:
+   - **Same server** as backup source
+   - **Different server** (dropdown)
+   - **Custom path** only (no SSH target)
+3. Set restore path → optional **AI Analysis** → **Start Restore**
+4. Track jobs in **Restore Jobs** list
+
+### Monitoring
+
+- View fleet-wide averages or filter by **server**
+- Click **Refresh**; collect metrics from Infrastructure first if charts are empty
+
+### AI Intelligence
+
+- Chat about failures, risks, restores, storage
+- Status banner shows **anthropic** / **openai** when keys are loaded, or heuristic mode without keys
+- Requires `ai:use` permission (Owner/Admin/Operator)
+
+### If buttons do nothing or AI shows errors
+
+1. **Sign out and sign in again** (refreshes CSRF token)
+2. Rebuild frontend after code updates:
+
+   ```bash
+   docker compose build --no-cache frontend
+   docker compose up -d --force-recreate frontend nginx
+   ```
+
+3. For AI keys: add to `.env` and `docker compose restart api worker`
+
+---
+
+## 4. Project Overview
+
+| Feature | Description |
+|---------|-------------|
+| Infrastructure | SSH Linux servers, live CPU/RAM/Disk metrics |
+| Backups | Restic, Rsync, Rclone, Borg; full/incremental/DB/Docker/path |
+| Restore | AI analysis, confidence score, overwrite protection |
+| AI | Claude or OpenAI (optional); heuristic fallback |
+| Health engine | Health score, corruption risk, restore readiness |
+| Alerts | In-app (+ email with SMTP) |
+| RBAC | Owner, Admin, Operator, Viewer |
+
+---
+
+## 5. Architecture
 
 ```
                     ┌─────────────┐
@@ -66,68 +216,62 @@ Backup Intelligence is a multi-tenant SaaS platform that provides:
            ▼               ▼               ▼
     ┌────────────┐  ┌────────────┐  ┌──────────────┐
     │  Next.js   │  │  FastAPI   │  │  Prometheus  │
-    │  Frontend  │  │    API     │  │   :9090      │
+    │  :3000     │  │  :8000     │  │   :9090      │
     └────────────┘  └─────┬──────┘  └──────────────┘
                           │
          ┌────────────────┼────────────────┐
          ▼                ▼                ▼
   ┌────────────┐   ┌────────────┐   ┌────────────┐
-  │ PostgreSQL │   │   Redis    │   │  /data/    │
-  │            │   │  + Celery  │   │  backups   │
+  │ PostgreSQL │   │   Redis    │   │  backups   │
+  │            │   │  + Celery  │   │  volume    │
   └────────────┘   └────────────┘   └────────────┘
 ```
 
-- **API** handles auth, CRUD, AI requests
-- **Celery workers** execute backups, restores, metric collection
-- **Celery beat** runs scheduled backups and maintenance
-- **Backup tools** run inside worker containers (restic, rsync, rclone, borg)
+- **Nginx** — single public entry; `/` → frontend, `/api/` → API
+- **API** — auth, CRUD, AI, dashboard stats
+- **Worker** — backup/restore jobs, SSH metrics
+- **Beat** — scheduled backups and maintenance
 
 ---
 
-## 3. Folder Structure
+## 6. Folder Structure
 
 ```
 ├── backend/
-│   ├── app/
-│   │   ├── api/           # REST routes
-│   │   ├── core/          # Config, auth, RBAC, DB
-│   │   ├── models/        # SQLAlchemy entities
-│   │   ├── schemas/       # Pydantic models
-│   │   ├── services/      # Business logic
-│   │   └── workers/       # Celery tasks
-│   ├── alembic/           # DB migrations
-│   ├── Dockerfile
-│   └── requirements.txt
+│   ├── app/api/          # REST routes
+│   ├── app/core/         # Config, auth, RBAC, CSRF
+│   ├── app/services/     # SSH, AI, backup engines
+│   ├── app/workers/      # Celery tasks
+│   └── alembic/          # Migrations
 ├── frontend/
-│   ├── src/
-│   │   ├── app/           # Next.js pages
-│   │   ├── components/    # UI components
-│   │   └── lib/           # API client, utils
-│   └── Dockerfile
-├── nginx/                 # Reverse proxy config
-├── prometheus/            # Metrics config
-├── scripts/               # Startup helpers
+│   └── src/app/          # Next.js pages (login, dashboard, …)
+├── nginx/nginx.conf      # Reverse proxy (edit on host only)
+├── prometheus/
 ├── docker-compose.yml
+├── deploy-production.ps1
+├── deploy-production.sh
 └── .env.example
 ```
 
 ---
 
-## 4. Environment Variables
+## 7. Environment Variables
 
-Copy `.env.example` to `.env`:
+Copy the example file:
 
 ```bash
 cp .env.example .env
 ```
 
+Or let `deploy-production.ps1` / `deploy-production.sh` generate `.env` for you.
+
 ### Required
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET` | Secret for JWT signing (min 32 chars) |
-| `ENCRYPTION_KEY` | Fernet key for credential encryption |
+| `DATABASE_URL` | PostgreSQL URL (async driver in app; sync for Alembic in migrate container) |
+| `JWT_SECRET` | JWT signing secret (32+ characters) |
+| `ENCRYPTION_KEY` | Fernet key for encrypted SSH passwords/keys |
 
 Generate secrets:
 
@@ -135,22 +279,28 @@ Generate secrets:
 bash scripts/generate-secrets.sh
 ```
 
-### Optional (AI)
+### Optional — AI
 
 | Variable | Description |
 |----------|-------------|
-| `ANTHROPIC_API_KEY` | Claude API — auto-detected first |
-| `OPENAI_API_KEY` | OpenAI API — used if Anthropic not set |
+| `ANTHROPIC_API_KEY` | Claude (preferred if both set) |
+| `OPENAI_API_KEY` | GPT-4o |
 
-Without AI keys, heuristic analysis still works. You can deploy first and add keys later (see below).
+Leave empty to use built-in heuristic AI (still works for chat and analysis).
+
+### Other common variables
+
+| Variable | Default / notes |
+|----------|-----------------|
+| `FRONTEND_URL` | `http://localhost` or your public URL |
+| `CORS_ORIGINS` | Must include your browser origin |
+| `BACKUP_STORAGE_PATH` | `/data/backups` in containers |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Used by postgres service |
+| `SESSION_COOKIE_SECURE` | `true` when using HTTPS |
 
 ### Adding AI keys after deployment
 
-You do **not** need an API key to deploy. Run `deploy-production.ps1` or `deploy-production.sh` first; the platform works fully with built-in heuristic AI until you add a key.
-
-When you are ready:
-
-1. Open `.env` in the project root and set **one** of:
+1. Edit `.env` on the **host**:
 
    ```env
    ANTHROPIC_API_KEY=sk-ant-your-key-here
@@ -162,40 +312,87 @@ When you are ready:
    OPENAI_API_KEY=sk-your-key-here
    ```
 
-   If both are set, Anthropic is used first.
+   Do not use quotes unless the value itself contains spaces. Empty values are treated as unset.
 
-2. Restart services so the API reloads environment variables (you do **not** need to re-run the deploy script):
-
-   ```bash
-   docker compose restart api
-   ```
-
-   Or restart the full stack:
+2. Restart API and worker:
 
    ```bash
-   docker compose restart
+   docker compose restart api worker
    ```
 
-3. Confirm in the UI: open **AI Intelligence** and send a message — responses should use Claude or OpenAI instead of the basic heuristic mode.
+3. Open **AI Intelligence** — green banner should show `AI provider active: anthropic` (or `openai`).
 
-**Important:** Edit `.env` on the host and restart containers. Do not only change variables inside a running container; Docker Compose reads `.env` when containers start or restart.
+4. Check status via API:
+
+   ```bash
+   curl -H "Authorization: Bearer YOUR_TOKEN" \
+        -H "X-Organization-Id: YOUR_ORG_ID" \
+        http://YOUR_SERVER/api/ai/status
+   ```
 
 ---
 
-## 5. Local Development Setup
+## 8. Production Deployment
 
-### Prerequisites
+### Deploy script options
 
-- Docker & Docker Compose
-- Node.js 20+ (for frontend dev)
-- Python 3.12+ (for backend dev)
+```powershell
+# Windows — custom public URL
+$env:DEPLOY_HOST = "https://backup.yourcompany.com"
+.\deploy-production.ps1
 
-### Backend (local)
+# Pass AI key for this run
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+.\deploy-production.ps1
+```
+
+```bash
+# Linux — custom host
+DEPLOY_HOST=https://backup.example.com ./deploy-production.sh
+
+ANTHROPIC_API_KEY=sk-ant-... ./deploy-production.sh
+```
+
+**Auto-detected / preserved on re-run:**
+
+| Item | Behavior |
+|------|----------|
+| `DEPLOY_HOST` / `FRONTEND_URL` | Machine IP, hostname, or env override |
+| `JWT_SECRET`, `ENCRYPTION_KEY`, `POSTGRES_PASSWORD` | Generated once, kept on re-run |
+| AI keys | Read from env or existing `.env` |
+
+### Manual deploy
+
+```bash
+docker compose up -d postgres redis
+sleep 10
+docker compose --profile migrate run --rm migrate
+docker compose up -d
+```
+
+### Apply UI / code updates
+
+```bash
+docker compose build --no-cache api frontend
+docker compose up -d --force-recreate api frontend nginx worker beat
+```
+
+### Nginx
+
+- Config file: **`nginx/nginx.conf`** only (mounted into container)
+- Upstreams must use Compose service names: `api:8000`, `frontend:3000`
+- After editing: `docker compose up -d nginx --force-recreate`
+
+---
+
+## 9. Local Development
+
+### Backend
 
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 export DATABASE_URL=postgresql+asyncpg://backupintel:backupintel_secret@localhost:5432/backup_intelligence
@@ -206,7 +403,7 @@ alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-### Frontend (local)
+### Frontend
 
 ```bash
 cd frontend
@@ -214,7 +411,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000
+Open **http://localhost:3000** (dev server proxies API or set `NEXT_PUBLIC_API_URL`).
 
 ### Workers (local)
 
@@ -226,471 +423,262 @@ celery -A app.workers.celery_app beat --loglevel=info
 
 ---
 
-## 6. Production Deployment
+## 10. Database, Redis & Migrations
 
-### One-command deploy (recommended)
-
-The deployment script auto-detects everything: host URL, Docker, secrets, AI keys from your environment, builds images, migrates the DB, and starts the full stack.
-
-**Windows (PowerShell):**
-
-```powershell
-cd "C:\path\to\main project"
-.\deploy-production.ps1
-```
-
-**Linux / macOS / WSL / Git Bash:**
-
-```bash
-chmod +x deploy-production.sh
-./deploy-production.sh
-docker exec -it bi-api alembic upgrade head
-```
-
-**Optional overrides (detected automatically if omitted):**
-
-```powershell
-# Custom public URL (HTTPS production)
-$env:DEPLOY_HOST = "https://backup.yourcompany.com"
-.\deploy-production.ps1
-```
-
-```bash
-# Pass AI key for this run only
-ANTHROPIC_API_KEY=sk-ant-your-key ./deploy-production.sh
-
-# Custom host
-DEPLOY_HOST=https://backup.example.com ./deploy-production.sh
-```
-
-**What the script auto-detects / generates:**
-
-| Variable | Behavior |
-|----------|----------|
-| `DEPLOY_HOST` / `FRONTEND_URL` | Machine IP, hostname, or `DEPLOY_HOST` env |
-| `JWT_SECRET` | Generated once, preserved on re-run |
-| `ENCRYPTION_KEY` | Fernet key generated once, preserved on re-run |
-| `POSTGRES_PASSWORD` | Generated once, preserved on re-run |
-| `ANTHROPIC_API_KEY` | From `$env:ANTHROPIC_API_KEY` / `.env` / `.env.example` |
-| `OPENAI_API_KEY` | From `$env:OPENAI_API_KEY` / `.env` / `.env.example` |
-| `DATABASE_URL`, Redis, Celery, CORS | Wired for Docker Compose automatically |
-
-Access after deploy:
-- **Web UI (via Nginx):** URL printed at end of script (e.g. `http://<your-ip>`) — port **80**
-- **API via Nginx:** `http://<your-ip>/api/` (e.g. `/api/health`, `/api/docs`)
-- **API direct (dev/debug):** `http://localhost:8000/api/health` — port **8000** is exposed on the host
-- **Prometheus:** http://localhost:9090
-
-Nginx uses **only** `nginx/nginx.conf` (mounted to `/etc/nginx/nginx.conf`). Do not edit config inside the container; change the file on the host and run `docker compose up -d nginx --force-recreate`.
-
-AI API keys are optional at deploy time. Add them later in `.env` and run `docker compose restart api` — see [Adding AI keys after deployment](#adding-ai-keys-after-deployment).
-
-### Manual deploy (alternative)
-
-```bash
-docker compose up -d postgres redis
-sleep 10
-docker compose --profile migrate run --rm migrate
-docker compose up -d
-```
-
----
-
-## 7. Docker Installation
-
-### Ubuntu/Debian
-
-```bash
-sudo apt update
-sudo apt install -y ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-sudo usermod -aG docker $USER
-```
-
-### Verify
-
-```bash
-docker --version
-docker compose version
-```
-
----
-
-## 8. PostgreSQL Setup
-
-PostgreSQL runs in Docker via `docker-compose.yml`. Data persists in `postgres_data` volume.
-
-### Manual connection
+### PostgreSQL
 
 ```bash
 docker exec -it bi-postgres psql -U backupintel -d backup_intelligence
 ```
 
-### Backup database
+Backup / restore:
 
 ```bash
 docker exec bi-postgres pg_dump -U backupintel backup_intelligence > backup.sql
-```
-
-### Restore database
-
-```bash
 cat backup.sql | docker exec -i bi-postgres psql -U backupintel backup_intelligence
 ```
 
----
-
-## 9. Redis Setup
-
-Redis runs in Docker on port 6379 (internal). Used for:
-
-- Celery broker (DB 1)
-- Celery results (DB 2)
-- Caching (DB 0)
+### Redis
 
 ```bash
 docker exec -it bi-redis redis-cli ping
 # PONG
 ```
 
----
-
-## 10. Running Migrations
+### Migrations
 
 ```bash
-# Via Docker
 docker compose --profile migrate run --rm migrate
+```
 
-# Local
+New migration (development):
+
+```bash
 cd backend
-alembic upgrade head
-
-# Create new migration
 alembic revision --autogenerate -m "description"
 ```
 
 ---
 
-## 11. Starting Workers
-
-Workers are started automatically via Docker Compose:
+## 11. Workers & Scheduled Tasks
 
 ```bash
 docker compose up -d worker beat
 docker compose logs -f worker
-docker compose logs -f beat
 ```
-
-### Scheduled tasks
 
 | Task | Interval |
 |------|----------|
-| Collect metrics | Every 5 min |
+| Collect server metrics | Every 5 min |
 | Scheduled backups | Every 15 min |
 | Health scores | Every 30 min |
 | Storage analytics | Hourly |
 | Alert checks | Every 10 min |
 
----
-
-## 12. Starting Frontend & Backend
+Scale workers:
 
 ```bash
-# All services
-docker compose up -d
-
-# Individual
-docker compose up -d api
-docker compose up -d frontend
-docker compose restart api
+docker compose up -d --scale worker=4
 ```
 
 ---
 
-## 13. Nginx Setup
+## 12. Nginx & SSL
 
-Nginx proxies:
-- `/` → Next.js frontend (port 3000)
-- `/api/` → FastAPI (port 8000)
-- `/metrics` → Prometheus metrics endpoint
+### Nginx routes
 
-Config: `nginx/nginx.conf`
+| Path | Target |
+|------|--------|
+| `/` | Next.js frontend |
+| `/api/` | FastAPI |
+| `/metrics` | API Prometheus endpoint |
+| `/_next/` | Next.js static assets |
 
-```bash
-docker compose restart nginx
-docker compose logs nginx
-```
-
----
-
-## 14. SSL Setup
-
-Use Certbot with Nginx on the host, or add SSL termination:
+### SSL (production)
 
 ```bash
 sudo apt install certbot python3-certbot-nginx
 sudo certbot --nginx -d yourdomain.com
 ```
 
-Update `nginx/nginx.conf` to listen on 443 with certificates, and set in `.env`:
+In `.env`:
 
-```
+```env
 SESSION_COOKIE_SECURE=true
+FRONTEND_URL=https://yourdomain.com
+CORS_ORIGINS=https://yourdomain.com
 ```
 
 ---
 
-## 15. Backup Engines
+## 13. Backup Engines
 
-| Engine | Use Case | Command |
-|--------|----------|---------|
-| **Restic** | Encrypted deduplicated backups | `restic backup` |
-| **Rsync** | Fast file sync | `rsync -az` |
-| **Rclone** | Cloud/local sync | `rclone sync` |
-| **Borg** | Deduplicated archives | `borg create` |
+| Engine | Use case |
+|--------|----------|
+| **Restic** | Encrypted, deduplicated snapshots |
+| **Rsync** | Fast file sync |
+| **Rclone** | Cloud or remote sync |
+| **Borg** | Deduplicated archives |
 
-### Backup types
+**Backup types:** `full`, `incremental`, `differential`, `snapshot`, `path`, `database`, `docker`
 
-- `full`, `incremental`, `differential`, `snapshot`, `path`
-- `database` — pg_dump, mysqldump, mongodump, redis-cli
-- `docker` — docker export + volume tar
-
-Storage path: `/data/backups/{org_id}/{backup_id}/`
+**Storage path (inside worker/API containers):** `/data/backups/{organization_id}/{backup_id}/`
 
 ---
 
-## 16. AI Layer
+## 14. AI Layer
 
-Auto-detects provider:
+**Provider priority:**
 
-1. `ANTHROPIC_API_KEY` → Claude (claude-sonnet-4-20250514)
+1. `ANTHROPIC_API_KEY` → Claude (`claude-sonnet-4-20250514`)
 2. `OPENAI_API_KEY` → GPT-4o
-3. Neither → Heuristic analysis engine
+3. Neither → heuristic engine (no external API)
 
-To enable Claude or OpenAI after install, add the key to `.env` and run `docker compose restart api`. See [Adding AI keys after deployment](#adding-ai-keys-after-deployment).
+**Features:**
 
-### Capabilities
-
-- Chat assistant with infrastructure context
+- Chat with infrastructure context (`/api/ai/chat`)
+- Provider status (`GET /api/ai/status`)
 - Backup failure analysis
-- Restore readiness prediction
-- Log summarization
-- Storage/retention recommendations
+- Restore readiness summaries
+
+**UI:** **AI Intelligence** page shows configured provider or heuristic mode.
 
 ---
 
-## 17. Monitoring
+## 15. Monitoring
 
-- **Prometheus** scrapes `/metrics` from API
-- **Metric snapshots** collected via SSH every 5 minutes
-- **Dashboard** shows CPU, RAM, Disk, throughput charts
-
-```bash
-# View Prometheus
-open http://localhost:9090
-```
+- **Prometheus:** `http://YOUR_SERVER:9090`
+- **Dashboard → Monitoring:** CPU, memory, disk charts (24h)
+- **Per-server filter** in Monitoring UI
+- Metrics collected via SSH from **Infrastructure → Metrics**
 
 ---
 
-## 18. Security
+## 16. Security & RBAC
 
 | Feature | Implementation |
 |---------|----------------|
-| Password hashing | Argon2 |
-| JWT auth | Access + refresh tokens |
-| Credential storage | Fernet encryption |
-| CSRF | Cookie + X-CSRF-Token header |
-| RBAC | 4 roles with permission matrix |
-| Rate limiting | slowapi (200/min default, 10/min auth) |
-| Security headers | X-Frame-Options, HSTS, etc. |
-| Audit logs | All sensitive actions logged |
+| Passwords | Argon2 |
+| Sessions | JWT access + refresh tokens |
+| SSH secrets | Fernet encryption at rest |
+| CSRF | `csrf_token` cookie + `X-CSRF-Token` header on POST/PUT/DELETE |
+| RBAC | Owner, Admin, Operator, Viewer |
+| Rate limits | 200/min default; 10/min on auth routes |
 
 ### Roles
 
-| Role | Permissions |
-|------|-------------|
+| Role | Typical access |
+|------|----------------|
 | Owner | Full access + billing |
-| Admin | Manage org, servers, backups |
-| Operator | Run backups/restores |
+| Admin | Servers, backups, policies, AI |
+| Operator | Run backups/restores, AI |
 | Viewer | Read-only |
 
----
+### CSRF note
 
-## 19. Scaling Guide
+If **Add Server**, **Create Backup**, or **AI chat** fails with `CSRF validation failed`:
 
-### Horizontal
-
-```yaml
-# docker-compose.yml — scale workers
-docker compose up -d --scale worker=4
-```
-
-### Vertical
-
-Increase worker concurrency:
-
-```bash
-celery -A app.workers.celery_app worker --concurrency=8
-```
-
-### Database
-
-- Add connection pooling (already configured, pool_size=20)
-- Consider read replicas for analytics queries
-
-### Storage
-
-- Mount larger volume at `/data/backups`
-- Add NFS/SAN mount for backup storage path
+1. Sign out → sign in (refreshes token)
+2. Ensure you use the app via **Nginx on port 80** (same origin for cookies)
+3. Rebuild frontend if you updated the UI recently
 
 ---
 
-## 20. Troubleshooting
+## 17. Troubleshooting
+
+### Logs
 
 ```bash
-# View all logs
 docker compose logs -f
-
-# API logs
 docker compose logs -f api
-
-# Worker logs
 docker compose logs -f worker
-
-# Database connectivity
-docker exec bi-api curl -f http://localhost:8000/api/health
-
-# Redis
-docker exec bi-redis redis-cli ping
+docker compose logs -f frontend
+docker compose logs -f nginx
 ```
 
----
-
-## 21. Common Errors
-
-| Error | Solution |
-|-------|----------|
-| `Connection refused` to postgres | Wait for healthcheck: `docker compose ps` |
-| `bi-api` Restarting loop | Run `docker compose logs api --tail=100` — usually a Python import/syntax error; rebuild: `docker compose build --no-cache api && docker compose up -d api` |
-| All pages show 404 | API may be down; rebuild frontend: `docker compose build --no-cache frontend && docker compose up -d frontend nginx` |
-| Signup returns 500 | `docker compose logs api --tail=50` — often bad role enum; ensure code has no git conflict markers; rebuild API |
-| Nginx routes to wrong service | Only edit `nginx/nginx.conf`; upstreams must be `api:8000` and `frontend:3000` (Compose service names, not IPs) |
-| `localhost:8000` connection refused | Use port 80 via Nginx, or ensure `api` service has `ports: "8000:8000"` in compose |
-| `Invalid token` | Re-login; check JWT_SECRET hasn't changed |
-| `CSRF validation failed` | Ensure csrf_token cookie + X-CSRF-Token header sent |
-| `Restic init failed` | Check BACKUP_STORAGE_PATH is writable |
-| `SSH connection failed` | Verify hostname, port, credentials; test via UI |
-| Migration errors | Run `docker compose --profile migrate run --rm migrate` |
-
----
-
-## 22. Health Checks
-
-| Endpoint | Expected |
-|----------|----------|
-| `GET /api/health` | `{"status": "healthy"}` |
-| `GET /metrics` | Prometheus format metrics |
-| PostgreSQL | `pg_isready` in container |
-| Redis | `redis-cli ping` → PONG |
+### Health
 
 ```bash
 curl http://localhost/api/health
+docker compose ps
+docker exec bi-redis redis-cli ping
 ```
 
----
+### Common errors
 
-## 23. Logs Management
-
-- **Application logs:** `docker compose logs`
-- **Centralized logs:** Platform Logs page (backup, restore, infrastructure, AI, audit)
-- **AI summarization:** POST `/api/logs/summarize`
-
-Log retention is managed via PostgreSQL; configure cleanup cron as needed.
-
----
-
-## 24. Restore Testing
-
-1. Go to **Restore Center**
-2. Select a backup
-3. Click **AI Analysis** — review confidence score and risks
-4. Set target path
-5. Click **Start Restore**
-6. Monitor job status in Restore Jobs list
-
-Overwrite protection prevents restoring to non-empty directories.
+| Symptom | Solution |
+|---------|----------|
+| Signup 500 / `relation "users" does not exist` | Run migrations: `docker compose --profile migrate run --rm migrate` |
+| `bi-api` restart loop | `docker compose logs api --tail=100`; rebuild: `docker compose build --no-cache api && docker compose up -d api` |
+| All pages 404 | Rebuild frontend + nginx: `docker compose build --no-cache frontend && docker compose up -d frontend nginx` |
+| Buttons silent / no action | Sign out/in; check browser console; rebuild frontend; look for `CSRF validation failed` in API logs |
+| `CSRF validation failed` | Re-login; use `http://YOUR_SERVER` not mixed IP/localhost |
+| AI always says configure API key | Add key to `.env`, `docker compose restart api worker`; check `/api/ai/status` |
+| `Invalid token` | Re-login; do not change `JWT_SECRET` after users exist |
+| SSH connection failed | Check host, port 22, firewall, password; use **Test** on Infrastructure |
+| Empty monitoring charts | Add server → **Metrics** on Infrastructure |
+| Restore blocked | Set destination + path; disable overwrite if target must be overwritten |
+| Nginx wrong backend | Edit only `nginx/nginx.conf`; upstreams `api:8000`, `frontend:3000` |
+| Port 8000 refused | Normal if only using Nginx; use `http://YOUR_SERVER/api/health` |
 
 ---
 
-## 25. Upgrade Instructions
+## 18. Commands Reference
 
 ```bash
-git pull origin main
-docker compose build
-docker compose --profile migrate run --rm migrate
+# Full deploy
+./deploy-production.sh              # Linux / WSL
+.\deploy-production.ps1             # Windows
+
+# Lifecycle
 docker compose up -d
-```
-
----
-
-## 26. Commands Reference
-
-```bash
-# Full production deploy (auto .env + build + migrate + start)
-./deploy-production.sh          # Linux / WSL / Git Bash
-.\deploy-production.ps1         # Windows PowerShell
-
-# Start
-docker compose up -d
-
-# Stop
 docker compose down
+docker compose ps
 
-# Rebuild
-docker compose build --no-cache
+# Rebuild after code changes
+docker compose build --no-cache api frontend
+docker compose up -d --force-recreate api frontend nginx worker
 
 # Migrations
 docker compose --profile migrate run --rm migrate
 
-# Shell into API
+# Restart after .env change
+docker compose restart api worker
+
+# AI keys only
+docker compose restart api worker
+
+# Shell / debug
 docker exec -it bi-api bash
-
-# Create user (via UI signup at /signup)
-
-# View backup storage
 docker exec bi-worker ls -la /data/backups/
 
 # Scale workers
 docker compose up -d --scale worker=3
 
-# Generate secrets
+# Secrets
 bash scripts/generate-secrets.sh
 ```
 
 ---
 
-## 27. Deployment Checklist
+## 19. Deployment Checklist
 
-- [ ] Set strong `JWT_SECRET` and `ENCRYPTION_KEY`
-- [ ] Configure `.env` with production values
-- [ ] Run database migrations
-- [ ] Verify all containers healthy: `docker compose ps`
-- [ ] Test signup/login flow
-- [ ] Add at least one server and test SSH connection
-- [ ] Create and run a test backup
-- [ ] Run restore analysis
-- [ ] Configure SMTP for email alerts (optional)
-- [ ] Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` (optional)
-- [ ] Enable SSL with Certbot
-- [ ] Set `SESSION_COOKIE_SECURE=true`
-- [ ] Configure firewall (allow 80, 443; restrict 9090)
-- [ ] Set up backup of PostgreSQL and `/data/backups`
-- [ ] Verify Prometheus scraping
-- [ ] Test alert generation
+- [ ] Docker and Compose installed
+- [ ] Run `deploy-production.ps1` or `deploy-production.sh`
+- [ ] Migrations succeeded (`docker compose --profile migrate run --rm migrate`)
+- [ ] All containers healthy: `docker compose ps`
+- [ ] `curl http://YOUR_SERVER/api/health` returns healthy
+- [ ] Sign up at `/signup` and log in at `/login`
+- [ ] Add server on **Infrastructure** and **Test** SSH
+- [ ] Create backup with **target server** selected
+- [ ] Run backup job; check **Logs** / **Backups** status
+- [ ] Test **Restore Center** (analysis + job)
+- [ ] Check **Monitoring** after collecting metrics
+- [ ] Optional: set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, restart API
+- [ ] Optional: SMTP for email alerts
+- [ ] Optional: SSL + `SESSION_COOKIE_SECURE=true`
+- [ ] Firewall: allow **80** / **443**; restrict **9090** if public
+- [ ] Backup PostgreSQL volume and `/data/backups` regularly
 
 ---
 
@@ -700,56 +688,6 @@ Proprietary — All rights reserved.
 
 ## Support
 
-For issues, check logs with `docker compose logs -f` and refer to the troubleshooting section above.
-
-
-Login ke baad — dashboard pages
-Page	Link
-Dashboard
-http://YOUR_SERVER/dashboard
-Infrastructure (servers)
-http://YOUR_SERVER/infrastructure
-Backups
-http://YOUR_SERVER/backups
-Restore
-http://YOUR_SERVER/restore
-Monitoring
-http://YOUR_SERVER/monitoring
-AI Intelligence
-http://YOUR_SERVER/ai
-Logs
-http://YOUR_SERVER/logs
-Policies
-http://YOUR_SERVER/policies
-Alerts
-http://YOUR_SERVER/alerts
-Storage
-http://YOUR_SERVER/storage
-Organizations
-http://YOUR_SERVER/organizations
-Billing
-http://YOUR_SERVER/billing
-Settings
-http://YOUR_SERVER/settings
-Root http://YOUR_SERVER bhi frontend par jata hai; logged-in nahi ho to aksar login par redirect hota hai.
-
-API / health (check ke liye)
-Kaam	Link
-Health check
-http://YOUR_SERVER/api/health
-API docs (Swagger)
-http://YOUR_SERVER/api/docs
-API direct (debug, port 8000)
-http://YOUR_SERVER:8000/api/health
-Browser se UI ke liye port 80 (http://YOUR_SERVER) best hai; /api Nginx se backend ko jata hai.
-
-Extra services
-Service	Link
-Prometheus (metrics)
-http://YOUR_SERVER:9090
-Typical flow
-http://YOUR_SERVER/signup → account + organization
-Auto redirect → http://YOUR_SERVER/dashboard
-Infrastructure → server add
-Backups → job create
-Restore / Monitoring / AI — sidebar se
+1. Check [URLs After Setup](#2-urls-after-setup) and [Troubleshooting](#17-troubleshooting)
+2. Run `docker compose logs -f api` and reproduce the error
+3. Note the exact message from the red banner in the UI (if shown)
