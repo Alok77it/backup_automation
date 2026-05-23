@@ -89,7 +89,15 @@ async def signup(request: Request, data: SignupRequest, db: DbSession, response:
         csrf_token=csrf,
     )
 
-    await log_audit(db, org.id, "user.signup", "user", user.id, str(user.id), request.client.host if request.client else None)
+    await log_audit(
+        db,
+        org.id,
+        "user.signup",
+        "user",
+        user_id=user.id,
+        resource_id=str(user.id),
+        ip_address=request.client.host if request.client else None,
+    )
 
     return AuthResponse(
         user=UserResponse.model_validate(user),

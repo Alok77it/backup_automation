@@ -56,7 +56,8 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 40s
     networks:
       - bi-network
 
@@ -106,8 +107,14 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: /api
-    depends_on:
-      - api
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     networks:
       - bi-network
 

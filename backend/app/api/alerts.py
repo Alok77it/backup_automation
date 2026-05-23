@@ -4,8 +4,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, update
 
-from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
-from app.models.entities import Alert
+from app.core.dependencies import DbSession, require_permission, verify_csrf
+from app.models.entities import Alert, OrganizationMember
 from app.schemas.resources import AlertResponse
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])

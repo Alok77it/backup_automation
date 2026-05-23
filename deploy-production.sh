@@ -223,6 +223,7 @@ EOF
 ok "Wrote ${ENV_FILE}"
 
 step "Building Docker images"
+compose build --no-cache api frontend
 compose build --parallel
 
 step "Starting PostgreSQL and Redis"

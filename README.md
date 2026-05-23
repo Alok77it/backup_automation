@@ -571,6 +571,8 @@ docker exec bi-redis redis-cli ping
 | Error | Solution |
 |-------|----------|
 | `Connection refused` to postgres | Wait for healthcheck: `docker compose ps` |
+| `bi-api` Restarting loop | Run `docker compose logs api --tail=100` — usually a Python import/syntax error; rebuild: `docker compose build --no-cache api && docker compose up -d api` |
+| All pages show 404 | API may be down; rebuild frontend: `docker compose build --no-cache frontend && docker compose up -d frontend nginx` |
 | `Invalid token` | Re-login; check JWT_SECRET hasn't changed |
 | `CSRF validation failed` | Ensure csrf_token cookie + X-CSRF-Token header sent |
 | `Restic init failed` | Check BACKUP_STORAGE_PATH is writable |

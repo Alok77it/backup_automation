@@ -326,6 +326,7 @@ Write-Step "Writing environment file"
 Write-EnvFile -Vars $allVars
 
 Write-Step "Building Docker images (this may take several minutes)"
+Invoke-Compose @("build", "--no-cache", "api", "frontend")
 Invoke-Compose @("build", "--parallel")
 
 Write-Step "Starting PostgreSQL and Redis"
