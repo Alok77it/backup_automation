@@ -8,9 +8,24 @@ from app.core.dependencies import CurrentUser, DbSession, require_permission, ve
 from app.models.entities import OrganizationMember
 from app.models.entities import AIConversation, AIConversationMessage, Alert, Backup, BackupRun, JobStatus, LogEntry, Server
 from app.schemas.resources import AIChatRequest, AIChatResponse, AIConversationResponse
+from app.core.config import get_settings
 from app.services.ai_service import get_ai_response
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+@router.get("/status")
+async def ai_status(
+    membership: Annotated[OrganizationMember, Depends(require_permission("ai:use"))],
+):
+    settings = get_settings()
+    provider = settings.ai_provider
+    return {
+        "provider": provider,
+        "configured": provider != "none",
+        "anthropic": bool(settings.ANTHROPIC_API_KEY),
+        "openai": bool(settings.OPENAI_API_KEY),
+    }
 
 
 async def _build_context(db, org_id: uuid.UUID) -> dict:

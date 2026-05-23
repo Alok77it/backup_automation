@@ -101,7 +101,10 @@ async def create_restore(
         estimated_duration_seconds=analysis["estimated_duration_seconds"],
         dependency_warnings=analysis["dependency_warnings"],
         corruption_risks=analysis["corruption_risks"],
-        ai_analysis_json=analysis,
+        ai_analysis_json={
+            **analysis,
+            "target_server_id": str(data.target_server_id) if data.target_server_id else None,
+        },
     )
     db.add(job)
     await db.flush()

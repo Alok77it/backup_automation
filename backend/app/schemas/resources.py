@@ -194,6 +194,7 @@ class RestoreCreate(BaseModel):
     backup_id: uuid.UUID
     backup_run_id: uuid.UUID | None = None
     target_path: str
+    target_server_id: uuid.UUID | None = None
     overwrite_protection: bool = True
 
 
