@@ -29,13 +29,18 @@ class Role(str, enum.Enum):
     VIEWER = "viewer"
 
 
-# PostgreSQL enum uses lowercase values (owner), not Python names (OWNER)
-_role_enum = Enum(
-    Role,
-    name="role",
-    values_callable=lambda enum_cls: [member.value for member in enum_cls],
-    native_enum=True,
-)
+# All PostgreSQL enums use lowercase values — values_callable ensures SQLAlchemy
+# sends the .value ("unknown") not the Python key name ("UNKNOWN").
+def _make_enum(enum_cls, name: str):
+    return Enum(
+        enum_cls,
+        name=name,
+        values_callable=lambda cls: [m.value for m in cls],
+        native_enum=True,
+    )
+
+
+_role_enum = _make_enum(Role, "role")
 
 
 class BackupType(str, enum.Enum):
@@ -73,6 +78,14 @@ class ServerStatus(str, enum.Enum):
     OFFLINE = "offline"
     UNKNOWN = "unknown"
     ERROR = "error"
+
+
+# SQLAlchemy Enum type objects — reused in mapped_column() below
+_server_status_enum = _make_enum(ServerStatus, "serverstatus")
+_backup_type_enum   = _make_enum(BackupType,   "backuptype")
+_backup_engine_enum = _make_enum(BackupEngine, "backupengine")
+_job_status_enum    = _make_enum(JobStatus,    "jobstatus")
+_alert_severity_enum = _make_enum(AlertSeverity, "alertseverity")
 
 
 def _uuid() -> uuid.UUID:
@@ -179,7 +192,7 @@ class Server(Base):
     encrypted_password: Mapped[str | None] = mapped_column(Text)
     encrypted_private_key: Mapped[str | None] = mapped_column(Text)
     auth_method: Mapped[str] = mapped_column(String(20), default="password")
-    status: Mapped[ServerStatus] = mapped_column(Enum(ServerStatus), default=ServerStatus.UNKNOWN)
+    status: Mapped[ServerStatus] = mapped_column(_server_status_enum, default=ServerStatus.UNKNOWN)
     os_info: Mapped[str | None] = mapped_column(String(255))
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     metadata_json: Mapped[dict | None] = mapped_column(JSON, default=dict)
@@ -220,8 +233,8 @@ class Backup(Base):
     server_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("servers.id", ondelete="SET NULL"))
     policy_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("backup_policies.id", ondelete="SET NULL"))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    backup_type: Mapped[BackupType] = mapped_column(Enum(BackupType), nullable=False)
-    engine: Mapped[BackupEngine] = mapped_column(Enum(BackupEngine), default=BackupEngine.RSYNC)
+    backup_type: Mapped[BackupType] = mapped_column(_backup_type_enum, nullable=False)
+    engine: Mapped[BackupEngine] = mapped_column(_backup_engine_enum, default=BackupEngine.RSYNC)
     source_paths: Mapped[list | None] = mapped_column(JSON, default=list)
     target_path: Mapped[str] = mapped_column(String(512), nullable=False)
     schedule_cron: Mapped[str | None] = mapped_column(String(100))
@@ -248,7 +261,7 @@ class BackupRun(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     backup_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("backups.id", ondelete="CASCADE"), index=True)
-    status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), default=JobStatus.PENDING)
+    status: Mapped[JobStatus] = mapped_column(_job_status_enum, default=JobStatus.PENDING)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     bytes_processed: Mapped[int] = mapped_column(Integer, default=0)
@@ -272,7 +285,7 @@ class RestoreJob(Base):
     backup_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("backups.id", ondelete="CASCADE"), index=True)
     backup_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("backup_runs.id", ondelete="SET NULL"))
     initiated_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
-    status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), default=JobStatus.PENDING)
+    status: Mapped[JobStatus] = mapped_column(_job_status_enum, default=JobStatus.PENDING)
     target_path: Mapped[str] = mapped_column(String(512), nullable=False)
     overwrite_protection: Mapped[bool] = mapped_column(Boolean, default=True)
     restore_confidence: Mapped[float] = mapped_column(Float, default=0.0)
@@ -313,7 +326,7 @@ class Alert(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     alert_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    severity: Mapped[AlertSeverity] = mapped_column(Enum(AlertSeverity), default=AlertSeverity.INFO)
+    severity: Mapped[AlertSeverity] = mapped_column(_alert_severity_enum, default=AlertSeverity.INFO)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
     email_sent: Mapped[bool] = mapped_column(Boolean, default=False)
