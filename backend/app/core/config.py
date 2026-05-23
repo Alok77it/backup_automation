@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +43,14 @@ class Settings(BaseSettings):
     RATE_LIMIT_AUTH: str = "10/minute"
 
     PROMETHEUS_PORT: int = 9090
+
+    @field_validator("ANTHROPIC_API_KEY", "OPENAI_API_KEY", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        stripped = str(v).strip()
+        return stripped if stripped else None
 
     @property
     def cors_origins_list(self) -> list[str]:

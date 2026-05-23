@@ -5,7 +5,6 @@ from typing import Any
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 SYSTEM_PROMPT = """You are Backup Intelligence AI, an expert infrastructure and backup recovery assistant.
 You analyze backup logs, metrics, restore history, and infrastructure events.
@@ -19,6 +18,7 @@ async def get_ai_response(
     context: dict[str, Any] | None = None,
     conversation_history: list[dict[str, str]] | None = None,
 ) -> str:
+    settings = get_settings()
     provider = settings.ai_provider
     if provider == "none":
         return _heuristic_response(user_message, context)
@@ -45,6 +45,7 @@ async def get_ai_response(
 async def _anthropic_chat(messages: list[dict[str, str]]) -> str:
     import anthropic
 
+    settings = get_settings()
     client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
     response = await client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -58,6 +59,7 @@ async def _anthropic_chat(messages: list[dict[str, str]]) -> str:
 async def _openai_chat(messages: list[dict[str, str]]) -> str:
     from openai import AsyncOpenAI
 
+    settings = get_settings()
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
     response = await client.chat.completions.create(

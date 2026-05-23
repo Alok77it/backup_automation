@@ -1,12 +1,25 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string
+  ) {
     super(message);
   }
 }
 
+function syncCsrfCookie() {
+  if (typeof document === "undefined") return;
+  const csrf = localStorage.getItem("csrf_token");
+  if (csrf) {
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `csrf_token=${encodeURIComponent(csrf)}; path=/; SameSite=Lax${secure}`;
+  }
+}
+
 function getAuthHeaders(): HeadersInit {
+  syncCsrfCookie();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -21,10 +34,17 @@ function getAuthHeaders(): HeadersInit {
   return headers;
 }
 
-export async function api<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
+function parseErrorDetail(err: unknown): string {
+  if (!err || typeof err !== "object") return "Request failed";
+  const e = err as { detail?: unknown };
+  if (typeof e.detail === "string") return e.detail;
+  if (Array.isArray(e.detail)) {
+    return e.detail.map((d: { msg?: string }) => d.msg || "").filter(Boolean).join(", ") || "Validation error";
+  }
+  return "Request failed";
+}
+
+export async function api<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${endpoint}`, {
     ...options,
     headers: { ...getAuthHeaders(), ...options.headers },
@@ -44,6 +64,7 @@ export async function api<T>(
           localStorage.setItem("access_token", data.access_token);
           localStorage.setItem("refresh_token", data.refresh_token);
           localStorage.setItem("csrf_token", data.csrf_token);
+          syncCsrfCookie();
           return api<T>(endpoint, options);
         }
       } catch {
@@ -56,8 +77,8 @@ export async function api<T>(
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new ApiError(res.status, err.detail || "Request failed");
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, parseErrorDetail(err));
   }
 
   if (res.status === 204) return {} as T;
@@ -93,6 +114,16 @@ export interface DashboardStats {
   backup_health_avg: number;
 }
 
+export interface Server {
+  id: string;
+  name: string;
+  hostname: string;
+  port: number;
+  username: string;
+  status: string;
+  os_info: string | null;
+}
+
 export function saveAuth(data: AuthResponse) {
   localStorage.setItem("access_token", data.tokens.access_token);
   localStorage.setItem("refresh_token", data.tokens.refresh_token);
@@ -100,6 +131,7 @@ export function saveAuth(data: AuthResponse) {
   localStorage.setItem("organization_id", data.organization_id);
   localStorage.setItem("user", JSON.stringify(data.user));
   localStorage.setItem("role", data.role);
+  syncCsrfCookie();
 }
 
 export function clearAuth() {

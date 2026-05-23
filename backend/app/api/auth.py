@@ -47,6 +47,7 @@ def _set_csrf_cookie(response: Response, csrf: str) -> None:
         httponly=False,
         samesite="lax",
         secure=settings.SESSION_COOKIE_SECURE,
+        path="/",
     )
 
 

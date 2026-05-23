@@ -42,12 +42,12 @@ export default function DashboardPage() {
   return (
     <DashboardLayout title="Dashboard">
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <MetricCard title="Total Servers" value={stats?.total_servers ?? 0} icon={Server} />
-        <MetricCard title="Active Backups" value={stats?.active_backups ?? 0} icon={HardDrive} />
-        <MetricCard title="Failed Jobs (24h)" value={stats?.failed_jobs_24h ?? 0} icon={AlertTriangle} subtitle="Requires attention" />
-        <MetricCard title="Storage Used" value={formatBytes(stats?.storage_used_bytes ?? 0)} icon={Database} subtitle={`${storagePct.toFixed(1)}% of quota`} />
-        <MetricCard title="Restore Readiness" value={formatPercent(stats?.restore_readiness_avg ?? 0)} icon={Shield} />
-        <MetricCard title="AI Risk Alerts" value={stats?.ai_risk_alerts ?? 0} icon={Brain} subtitle={`Health avg: ${(stats?.backup_health_avg ?? 0).toFixed(0)}%`} />
+        <MetricCard title="Total Servers" value={stats?.total_servers ?? 0} icon={Server} delay={0} />
+        <MetricCard title="Active Backups" value={stats?.active_backups ?? 0} icon={HardDrive} delay={0.05} />
+        <MetricCard title="Failed Jobs (24h)" value={stats?.failed_jobs_24h ?? 0} icon={AlertTriangle} subtitle="Requires attention" delay={0.1} />
+        <MetricCard title="Storage Used" value={formatBytes(stats?.storage_used_bytes ?? 0)} icon={Database} subtitle={`${storagePct.toFixed(1)}% of quota`} delay={0.15} />
+        <MetricCard title="Restore Readiness" value={formatPercent(stats?.restore_readiness_avg ?? 0)} icon={Shield} delay={0.2} />
+        <MetricCard title="AI Risk Alerts" value={stats?.ai_risk_alerts ?? 0} icon={Brain} subtitle={`Health avg: ${(stats?.backup_health_avg ?? 0).toFixed(0)}%`} delay={0.25} />
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
@@ -96,7 +96,7 @@ export default function DashboardPage() {
           <div className="space-y-3">
             {events.length === 0 && <p className="text-sm text-gray-500">No recent events</p>}
             {events.map((e) => (
-              <div key={e.id} className="flex items-center gap-4 rounded-xl border p-4 transition hover:bg-[#D1FAE5]/30 dark:hover:bg-emerald-950/30">
+              <div key={e.id} className="flex items-center gap-4 rounded-xl border border-emerald-100 p-4 transition hover:bg-emerald-50/80 dark:border-emerald-900 dark:hover:bg-emerald-950/30">
                 <Badge variant={e.level === "error" ? "error" : e.level === "warning" ? "warning" : "default"}>{e.level}</Badge>
                 <div className="flex-1">
                   <p className="text-sm font-medium">{e.message}</p>
