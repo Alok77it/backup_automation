@@ -50,7 +50,11 @@ async def list_members(
                 user_id=user.id,
                 email=user.email,
                 full_name=user.full_name,
+<<<<<<< HEAD
                 role=mem.role.value,
+=======
+                role=mem.role,
+>>>>>>> 4fc4a62 (initial commit)
                 joined_at=mem.joined_at,
             )
         )
@@ -68,7 +72,11 @@ async def create_invitation(
     invitation = Invitation(
         organization_id=membership.organization_id,
         email=data.email,
+<<<<<<< HEAD
         role=Role(data.role),
+=======
+        role=normalize_role(data.role),
+>>>>>>> 4fc4a62 (initial commit)
         token=token,
         invited_by_id=user.id,
         expires_at=datetime.now(timezone.utc) + timedelta(days=7),

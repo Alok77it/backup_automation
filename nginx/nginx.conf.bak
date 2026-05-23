@@ -1,8 +1,5 @@
 worker_processes auto;
-<<<<<<< HEAD
-=======
 
->>>>>>> 4fc4a62 (initial commit)
 error_log /var/log/nginx/error.log warn;
 pid /var/run/nginx.pid;
 
@@ -13,28 +10,17 @@ events {
 http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
-<<<<<<< HEAD
-=======
 
->>>>>>> 4fc4a62 (initial commit)
     sendfile on;
     keepalive_timeout 65;
     client_max_body_size 100M;
 
     upstream api_backend {
-<<<<<<< HEAD
-        server api:8000;
-    }
-
-    upstream frontend_backend {
-        server frontend:3000;
-=======
         server bi-api:8000;
     }
 
     upstream frontend_backend {
         server bi-frontend:3000;
->>>>>>> 4fc4a62 (initial commit)
     }
 
     server {
@@ -45,48 +31,22 @@ http {
         add_header X-Frame-Options DENY always;
         add_header X-XSS-Protection "1; mode=block" always;
 
-<<<<<<< HEAD
-        # API (FastAPI)
-        location /api {
-            return 301 /api/;
-        }
-
-        location /api/ {
-            proxy_pass http://api_backend/api/;
-            proxy_http_version 1.1;
-=======
         # =========================
         # FASTAPI BACKEND
         # =========================
         location /api/ {
-            proxy_pass http://bi-api:8000;
+            proxy_pass http://bi-api:8000/;
             proxy_http_version 1.1;
 
->>>>>>> 4fc4a62 (initial commit)
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
-<<<<<<< HEAD
-            proxy_set_header X-Forwarded-Host $host;
-=======
 
->>>>>>> 4fc4a62 (initial commit)
             proxy_read_timeout 300s;
             proxy_connect_timeout 75s;
         }
 
-<<<<<<< HEAD
-        location /metrics {
-            proxy_pass http://api_backend/metrics;
-            proxy_set_header Host $host;
-        }
-
-        # Next.js static assets
-        location /_next/ {
-            proxy_pass http://frontend_backend;
-            proxy_http_version 1.1;
-=======
         # Prometheus metrics
         location /metrics {
             proxy_pass http://api_backend/metrics;
@@ -103,21 +63,12 @@ http {
 
             proxy_http_version 1.1;
 
->>>>>>> 4fc4a62 (initial commit)
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-<<<<<<< HEAD
-        # Next.js app (all pages)
-        location / {
-            proxy_pass http://frontend_backend;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-=======
         # =========================
         # FRONTEND APP
         # =========================
@@ -129,16 +80,11 @@ http {
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
 
->>>>>>> 4fc4a62 (initial commit)
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
-<<<<<<< HEAD
-            proxy_set_header X-Forwarded-Host $host;
-=======
 
->>>>>>> 4fc4a62 (initial commit)
             proxy_cache_bypass $http_upgrade;
         }
     }

@@ -47,3 +47,11 @@ class AuthResponse(BaseModel):
     tokens: TokenResponse
     organization_id: uuid.UUID
     role: str
+<<<<<<< HEAD
+=======
+from pydantic import BaseModel
+
+
+class MessageResponse(BaseModel):
+    message: str
+>>>>>>> 4fc4a62 (initial commit)
