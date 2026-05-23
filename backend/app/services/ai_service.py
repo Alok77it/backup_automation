@@ -1,23 +1,135 @@
+"""AI service — full context gathering, response generation, and action parsing.
+
+The AI can propose SSH commands using <ACTION> blocks embedded in its response:
+
+    <ACTION>
+    title: Restart nginx
+    description: nginx has crashed on web-01 per error logs
+    server_id: <UUID>
+    command: systemctl restart nginx && systemctl status nginx
+    risk_level: low
+    </ACTION>
+
+These blocks are extracted, stored as AIAction records (status=pending_approval),
+and replaced with a friendly inline placeholder in the text shown to users.
+"""
+
 import json
 import logging
+import re
+from dataclasses import dataclass
 from typing import Any
 
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are Backup Intelligence AI, an expert infrastructure and backup recovery assistant.
-You analyze backup logs, metrics, restore history, and infrastructure events.
-Provide actionable, precise technical guidance. Reference specific data when available.
-Focus on: backup failures, performance, corruption risks, restore safety, storage optimization, retention policies.
-Be concise but thorough. Use markdown formatting when helpful."""
+SYSTEM_PROMPT = """You are Backup Intelligence AI — an expert infrastructure, backup, and DevOps assistant.
 
+## Your Capabilities
+You have access to REAL-TIME platform data:
+- All servers, their status, CPU/memory/disk metrics
+- All backup jobs with health scores, recent run history, errors
+- Recent error/warning log entries
+- Unresolved alerts
+- Storage usage and trends
+
+## How to Propose Actions
+When you identify something that should be fixed on a server, you can propose an SSH command.
+Format it EXACTLY like this — one block per action:
+
+<ACTION>
+title: Short title (max 80 chars)
+description: Why this action is needed (1-2 sentences)
+server_id: <exact UUID from the context>
+command: <shell command to run>
+risk_level: low|medium|high
+</ACTION>
+
+Rules for actions:
+- Only propose actions for servers listed in the context (use their exact UUIDs)
+- Keep commands safe — avoid `rm -rf`, irreversible destructive operations
+- Mark `risk_level: high` for anything that restarts critical services or modifies data
+- You may propose multiple actions in one response
+- The user will review and approve/reject each action before anything runs
+
+## What to Analyze
+Focus on: backup failures, performance degradation, server risks, storage pressure,
+restore readiness, SSH/connectivity issues, service health on servers.
+
+Be concise, technical, and specific. Reference actual data from context.
+Use markdown formatting (headers, code blocks, bullet lists) for clarity."""
+
+
+# ─── Action parsing ──────────────────────────────────────────────────────────
+
+ACTION_BLOCK_RE = re.compile(
+    r"<ACTION>(.*?)</ACTION>", re.DOTALL | re.IGNORECASE
+)
+ACTION_FIELD_RE = re.compile(r"^\s*(\w+)\s*:\s*(.+)$", re.MULTILINE)
+
+
+@dataclass
+class ProposedAction:
+    title: str
+    description: str
+    server_id: str | None
+    command: str
+    risk_level: str
+
+
+def parse_actions(text: str) -> tuple[str, list[ProposedAction]]:
+    """Extract <ACTION> blocks from AI response text.
+
+    Returns:
+        (cleaned_text, list_of_ProposedAction)
+    cleaned_text has ACTION blocks replaced with a user-friendly placeholder.
+    """
+    actions: list[ProposedAction] = []
+    cleaned = text
+
+    for match in ACTION_BLOCK_RE.finditer(text):
+        block_text = match.group(1)
+        fields: dict[str, str] = {}
+        for field_match in ACTION_FIELD_RE.finditer(block_text):
+            key = field_match.group(1).strip().lower()
+            val = field_match.group(2).strip()
+            fields[key] = val
+
+        command = fields.get("command", "").strip()
+        title = fields.get("title", "Proposed action")
+        if not command:
+            continue
+
+        action = ProposedAction(
+            title=title[:255],
+            description=fields.get("description", ""),
+            server_id=fields.get("server_id", "").strip() or None,
+            command=command,
+            risk_level=fields.get("risk_level", "low").lower(),
+        )
+        actions.append(action)
+
+        risk_badge = {"low": "🟢", "medium": "🟡", "high": "🔴"}.get(action.risk_level, "🟡")
+        placeholder = (
+            f"\n\n---\n**{risk_badge} Proposed Action: {action.title}**\n"
+            f"> {action.description}\n"
+            f"```\n{action.command}\n```\n"
+            f"*Risk: {action.risk_level.upper()} — see approval card below*\n---\n"
+        )
+        cleaned = cleaned.replace(match.group(0), placeholder)
+
+    return cleaned, actions
+
+
+# ─── Main response function ───────────────────────────────────────────────────
 
 async def get_ai_response(
     user_message: str,
     context: dict[str, Any] | None = None,
     conversation_history: list[dict[str, str]] | None = None,
 ) -> str:
+    """Call AI provider and return raw response text (may contain ACTION blocks)."""
     settings = get_settings()
     provider = settings.ai_provider
     if provider == "none":
@@ -25,9 +137,15 @@ async def get_ai_response(
 
     context_block = ""
     if context:
-        context_block = f"\n\n## Platform Context\n```json\n{json.dumps(context, indent=2, default=str)[:8000]}\n```"
+        context_json = json.dumps(context, indent=2, default=str)
+        # Trim very long contexts — keep the most recent/important data
+        if len(context_json) > 12000:
+            context_json = context_json[:12000] + "\n... (truncated)"
+        context_block = (
+            f"\n\n---\n## Live System Context\n```json\n{context_json}\n```\n---"
+        )
 
-    messages = []
+    messages: list[dict[str, str]] = []
     if conversation_history:
         for msg in conversation_history[-20:]:
             messages.append({"role": msg["role"], "content": msg["content"]})
@@ -77,57 +195,80 @@ def _heuristic_response(message: str, context: dict | None) -> str:
     if "fail" in msg_lower and "backup" in msg_lower:
         failures = ctx.get("recent_failures", [])
         if failures:
+            lines = "\n".join(
+                f"- **{f.get('backup_name', 'Backup')}** on `{f.get('server', 'unknown')}`"
+                f": {f.get('error', 'Unknown error')[:120]}"
+                for f in failures[:5]
+            )
             return (
-                "## Backup Failure Analysis\n\n"
-                f"Detected {len(failures)} recent failure(s). "
-                f"Latest error: {failures[0].get('error', 'Unknown')}\n\n"
+                "## Recent Backup Failures\n\n"
+                f"{lines}\n\n"
                 "**Recommendations:**\n"
-                "1. Check SSH connectivity and credentials\n"
+                "1. Check SSH connectivity and credentials on the affected server\n"
                 "2. Verify source paths exist and are readable\n"
                 "3. Confirm sufficient disk space on backup target\n"
-                "4. Review backup engine logs for checksum errors"
+                "4. Review log output for detailed error messages\n\n"
+                "*(Add ANTHROPIC_API_KEY or OPENAI_API_KEY to .env for AI-powered root-cause analysis)*"
             )
-        return "No recent backup failures found in context. Check server connectivity and backup job configuration."
+        return "No recent backup failures found in context. All backups appear healthy."
 
-    if "slow" in msg_lower:
+    if "slow" in msg_lower or "performance" in msg_lower:
         avg_duration = ctx.get("avg_backup_duration_seconds", 0)
         return (
             f"## Backup Performance Analysis\n\n"
-            f"Average backup duration: {avg_duration:.1f}s\n\n"
+            f"Average backup duration: **{avg_duration:.1f}s**\n\n"
             "**Optimization steps:**\n"
-            "1. Enable compression if not active\n"
-            "2. Use incremental backups instead of full\n"
-            "3. Exclude unnecessary paths\n"
-            "4. Check network bandwidth to remote servers"
+            "1. Use incremental backups instead of full where possible\n"
+            "2. Enable compression to reduce transfer size\n"
+            "3. Exclude large, unimportant paths (logs, caches, temp files)\n"
+            "4. Check network bandwidth to remote servers\n"
+            "5. Schedule backups during off-peak hours"
         )
 
-    if "risky" in msg_lower or "risk" in msg_lower:
+    if "risk" in msg_lower or "risky" in msg_lower or "health" in msg_lower:
         servers = ctx.get("servers_at_risk", [])
+        backups_at_risk = ctx.get("backups_at_risk", [])
+        result = "## Risk Assessment\n\n"
         if servers:
-            lines = "\n".join(f"- **{s['name']}**: health {s.get('health', 'N/A')}" for s in servers)
-            return f"## Server Risk Assessment\n\n{lines}"
-        return "All monitored servers are within acceptable risk thresholds."
+            result += f"**Servers needing attention ({len(servers)}):**\n"
+            result += "\n".join(
+                f"- **{s['name']}** (`{s.get('hostname', '')}`) — {s.get('status', 'unknown')}"
+                for s in servers
+            ) + "\n\n"
+        if backups_at_risk:
+            result += f"**Low-health backups ({len(backups_at_risk)}):**\n"
+            result += "\n".join(
+                f"- **{b['name']}** — health: {b.get('health_score', 0):.0f}%, risk: {b.get('risk_level', 'unknown')}"
+                for b in backups_at_risk
+            ) + "\n\n"
+        if not servers and not backups_at_risk:
+            result += "All servers and backups are within acceptable risk thresholds. ✅"
+        return result
 
-    if "restore" in msg_lower and "safe" in msg_lower:
-        confidence = ctx.get("restore_confidence", 0)
+    if "restore" in msg_lower:
+        confidence = ctx.get("avg_restore_confidence", 0)
         return (
-            f"## Restore Safety Analysis\n\n"
-            f"Restore confidence: **{confidence}%**\n\n"
-            f"{'Restore appears safe to proceed with standard precautions.' if confidence >= 70 else 'Exercise caution - run integrity check before restore.'}"
+            f"## Restore Readiness\n\n"
+            f"Average restore confidence across all backups: **{confidence:.0f}%**\n\n"
+            + (
+                "✅ Restore confidence is high — proceed with standard precautions."
+                if confidence >= 70
+                else "⚠️ Restore confidence is low — run integrity checks before restoring."
+            )
         )
 
-    if "storage" in msg_lower or "optim" in msg_lower:
+    if "storage" in msg_lower or "optim" in msg_lower or "disk" in msg_lower:
         used = ctx.get("storage_used_gb", 0)
         quota = ctx.get("storage_quota_gb", 100)
         pct = (used / quota * 100) if quota else 0
         return (
-            f"## Storage Optimization\n\n"
-            f"Current usage: {used:.1f} GB / {quota:.1f} GB ({pct:.1f}%)\n\n"
+            f"## Storage Status\n\n"
+            f"Usage: **{used:.1f} GB / {quota:.1f} GB ({pct:.1f}%)**\n\n"
             "**Recommendations:**\n"
-            "1. Review retention policies for old snapshots\n"
-            "2. Enable deduplication (Restic/Borg)\n"
-            "3. Identify redundant full backups\n"
-            "4. Consider compression tuning"
+            "1. Review retention policies — delete runs older than policy limit\n"
+            "2. Enable incremental backups to reduce storage growth\n"
+            "3. Identify large backups with low restore confidence for review\n"
+            "4. Consider archiving old full backups to cold storage"
         )
 
     if "alert" in msg_lower or "warn" in msg_lower:
@@ -135,36 +276,40 @@ def _heuristic_response(message: str, context: dict | None) -> str:
         return (
             f"## Alert Summary\n\n"
             f"You have **{unresolved}** unresolved alert(s).\n\n"
-            "**Actions:**\n"
-            "1. Review alerts in the Alerts section\n"
-            "2. Resolve false positives to reduce noise\n"
-            "3. Configure alert thresholds in Policies\n"
-            "4. Set up email notifications for critical events"
+            "Go to the Alerts section to review and resolve them.\n"
+            "Configure thresholds in Policies to reduce noise."
         )
 
+    if "log" in msg_lower:
+        logs = ctx.get("recent_errors", [])
+        if logs:
+            lines = "\n".join(f"- `{l.get('level', 'info').upper()}` — {l.get('message', '')[:120]}" for l in logs[:10])
+            return f"## Recent Log Errors\n\n{lines}"
+        return "No recent errors found in system logs."
+
     if "server" in msg_lower or "infrastructure" in msg_lower or "fleet" in msg_lower:
-        servers = ctx.get("servers_at_risk", [])
-        confidence = ctx.get("restore_confidence", 0)
-        return (
-            f"## Infrastructure Status\n\n"
-            f"Restore confidence across your fleet: **{confidence:.0f}%**\n\n"
-            + (f"**Servers needing attention ({len(servers)}):**\n" + "\n".join(f"- **{s['name']}**: {s.get('status', 'unknown')}" for s in servers) + "\n\n" if servers else "All servers appear healthy.\n\n")
-            + "**Recommendations:**\n"
-            "1. Run connection tests on all servers regularly\n"
-            "2. Collect fresh metrics to get current CPU/RAM/Disk readings\n"
-            "3. Ensure backup agents have correct SSH credentials"
-        )
+        all_servers = ctx.get("all_servers", [])
+        result = f"## Infrastructure Overview\n\n**Total servers: {len(all_servers)}**\n\n"
+        for s in all_servers[:10]:
+            status_icon = "✅" if s.get("status") == "online" else "❌"
+            result += (
+                f"{status_icon} **{s['name']}** (`{s.get('hostname', '')}`) — "
+                f"CPU: {s.get('cpu', 'N/A')}%, MEM: {s.get('mem', 'N/A')}%, "
+                f"DISK: {s.get('disk', 'N/A')}%\n"
+            )
+        return result
 
     return (
         "## Backup Intelligence Assistant\n\n"
-        "I can help you analyze:\n"
-        "- **Backup failures** — root causes and fixes\n"
-        "- **Performance issues** — why backups are slow\n"
-        "- **Server risks** — which servers need attention\n"
-        "- **Restore safety** — confidence and risk assessment\n"
-        "- **Storage optimization** — reduce usage and cost\n"
-        "- **Alerts** — what needs immediate attention\n\n"
-        "💡 **Tip:** Add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to your `.env` file and restart the API for full Claude/GPT-powered analysis.\n\n"
+        "I analyze your live infrastructure data and can help with:\n"
+        "- **Backup failures** — root causes and targeted fixes\n"
+        "- **Server risks** — identify unhealthy or at-risk servers\n"
+        "- **Performance** — why backups are slow and how to speed them up\n"
+        "- **Restore safety** — confidence levels and risk assessment\n"
+        "- **Storage optimization** — reduce usage and extend retention\n"
+        "- **System logs** — recent errors and warning patterns\n"
+        "- **Actions** — propose and execute SSH commands with your approval\n\n"
+        "💡 Add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to your `.env` and restart the API for full AI analysis.\n\n"
         f"You asked: *{message}*"
     )
 
@@ -172,14 +317,18 @@ def _heuristic_response(message: str, context: dict | None) -> str:
 async def summarize_logs(logs: list[dict]) -> str:
     if not logs:
         return "No logs to summarize."
-    prompt = f"Summarize these {len(logs)} infrastructure/backup log entries. Highlight errors, patterns, and actionable items:\n"
+    prompt = (
+        f"Summarize these {len(logs)} infrastructure/backup log entries. "
+        "Highlight errors, patterns, and actionable items:\n"
+    )
     prompt += json.dumps(logs[:50], default=str)
     return await get_ai_response(prompt, {"log_count": len(logs)})
 
 
 async def analyze_backup_failure(error: str, logs: str, metadata: dict) -> str:
     prompt = (
-        f"Analyze this backup failure:\n\nError: {error}\n\nLogs:\n{logs[-3000:]}\n\n"
+        f"Analyze this backup failure and propose fixes:\n\n"
+        f"Error: {error}\n\nLogs:\n{logs[-3000:]}\n\n"
         f"Metadata: {json.dumps(metadata, default=str)}"
     )
     return await get_ai_response(prompt, metadata)

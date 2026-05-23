@@ -294,10 +294,27 @@ class AIChatRequest(BaseModel):
     conversation_id: uuid.UUID | None = None
 
 
+class AIActionResponse(BaseModel):
+    id: uuid.UUID
+    title: str
+    description: str | None
+    command: str
+    server_id: uuid.UUID | None
+    server_name: str | None
+    risk_level: str
+    status: str
+    result_output: str | None
+    error_message: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class AIChatResponse(BaseModel):
     conversation_id: uuid.UUID
     message: str
     role: str = "assistant"
+    proposed_actions: list[AIActionResponse] = []
 
 
 class AIConversationResponse(BaseModel):

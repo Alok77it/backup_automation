@@ -67,6 +67,15 @@ class JobStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class AIActionStatus(str, enum.Enum):
+    PENDING_APPROVAL = "pending_approval"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    EXECUTING = "executing"
+    EXECUTED = "executed"
+    FAILED = "failed"
+
+
 class AlertSeverity(str, enum.Enum):
     INFO = "info"
     WARNING = "warning"
@@ -82,11 +91,12 @@ class ServerStatus(str, enum.Enum):
 
 
 # SQLAlchemy Enum type objects — reused in mapped_column() below
-_server_status_enum = _make_enum(ServerStatus, "serverstatus")
-_backup_type_enum   = _make_enum(BackupType,   "backuptype")
-_backup_engine_enum = _make_enum(BackupEngine, "backupengine")
-_job_status_enum    = _make_enum(JobStatus,    "jobstatus")
-_alert_severity_enum = _make_enum(AlertSeverity, "alertseverity")
+_server_status_enum    = _make_enum(ServerStatus,    "serverstatus")
+_backup_type_enum      = _make_enum(BackupType,      "backuptype")
+_backup_engine_enum    = _make_enum(BackupEngine,    "backupengine")
+_job_status_enum       = _make_enum(JobStatus,       "jobstatus")
+_alert_severity_enum   = _make_enum(AlertSeverity,   "alertseverity")
+_ai_action_status_enum = _make_enum(AIActionStatus,  "aiactionstatus")
 
 
 def _uuid() -> uuid.UUID:
@@ -427,4 +437,39 @@ class PasswordResetToken(Base):
     token_hash: Mapped[str] = mapped_column(String(128), unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AIAction(Base):
+    """AI-proposed SSH actions awaiting human approval before execution."""
+
+    __tablename__ = "ai_actions"
+    __table_args__ = (Index("ix_ai_actions_org_status", "organization_id", "status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("ai_conversations.id", ondelete="SET NULL")
+    )
+    server_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("servers.id", ondelete="SET NULL")
+    )
+    approved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    status: Mapped[AIActionStatus] = mapped_column(
+        _ai_action_status_enum, default=AIActionStatus.PENDING_APPROVAL
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    command: Mapped[str] = mapped_column(Text, nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(20), default="low")
+    server_name: Mapped[str | None] = mapped_column(String(255))
+    result_output: Mapped[str | None] = mapped_column(Text)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    celery_task_id: Mapped[str | None] = mapped_column(String(255))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

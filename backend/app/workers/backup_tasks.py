@@ -280,6 +280,83 @@ def execute_restore_job(self, job_id: str) -> dict:
         session.close()
 
 
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=10)
+def execute_ai_action(self, action_id: str) -> dict:
+    """Execute an AI-proposed SSH command on the target server after human approval."""
+    session = _sync_session()
+    try:
+        from app.models.entities import AIAction, AIActionStatus
+
+        action = session.get(AIAction, uuid.UUID(action_id))
+        if not action:
+            return {"error": "Action not found"}
+        if action.status not in (AIActionStatus.APPROVED, AIActionStatus.EXECUTING):
+            return {"error": f"Action is {action.status.value}, expected approved"}
+
+        action.status = AIActionStatus.EXECUTING
+        session.commit()
+
+        server = session.get(Server, action.server_id) if action.server_id else None
+        if not server:
+            action.status = AIActionStatus.FAILED
+            action.error_message = "Target server not found in database"
+            action.executed_at = datetime.now(timezone.utc)
+            session.commit()
+            return {"error": "Server not found"}
+
+        password = decrypt_secret(server.encrypted_password) if server.encrypted_password else None
+        private_key = decrypt_secret(server.encrypted_private_key) if server.encrypted_private_key else None
+        auth_method = server.auth_method or "password"
+
+        try:
+            exit_code, stdout, stderr = run_ssh_command_sync(
+                hostname=server.hostname,
+                port=server.port,
+                username=server.username,
+                command=action.command,
+                password=password,
+                private_key=private_key,
+                auth_method=auth_method,
+                timeout=120,
+            )
+        except Exception as ssh_err:
+            action.status = AIActionStatus.FAILED
+            action.error_message = f"SSH error: {ssh_err}"
+            action.executed_at = datetime.now(timezone.utc)
+            session.commit()
+            return {"error": str(ssh_err)}
+
+        output = (stdout or "").strip()
+        errors = (stderr or "").strip()
+
+        action.status = AIActionStatus.EXECUTED if exit_code == 0 else AIActionStatus.FAILED
+        action.result_output = output[:8000] if output else None
+        action.error_message = f"exit {exit_code}: {errors[:2000]}" if exit_code != 0 else None
+        action.executed_at = datetime.now(timezone.utc)
+        session.commit()
+
+        return {
+            "status": action.status.value,
+            "exit_code": exit_code,
+            "output": output[:1000],
+        }
+    except Exception as e:
+        logger.exception("AI action execution failed: %s", e)
+        try:
+            from app.models.entities import AIAction, AIActionStatus
+            action = session.get(AIAction, uuid.UUID(action_id))
+            if action:
+                action.status = AIActionStatus.FAILED
+                action.error_message = str(e)
+                action.executed_at = datetime.now(timezone.utc)
+                session.commit()
+        except Exception:
+            pass
+        raise self.retry(exc=e)
+    finally:
+        session.close()
+
+
 @celery_app.task
 def run_scheduled_backups() -> dict:
     session = _sync_session()
