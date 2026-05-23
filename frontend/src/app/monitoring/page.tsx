@@ -229,7 +229,7 @@ export default function MonitoringPage() {
                   <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", background: "#fff" }}
-                    formatter={(v: number) => [`${v.toFixed(1)}%`]}
+                    formatter={(v) => [`${Number(v ?? 0).toFixed(1)}%`]}
                   />
                   <Legend />
                   <Line type="monotone" dataKey="cpu_percent" stroke="#10b981" name="CPU %" dot={false} strokeWidth={2} />
