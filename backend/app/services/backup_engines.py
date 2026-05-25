@@ -515,3 +515,197 @@ def run_docker_backup(
         log_output="\n".join(logs),
         error_message=None if success else "\n".join(logs)[-2000:],
     )
+
+
+def run_database_restore(
+    dump_file: str,
+    db_type: str,
+    db_host: str = "localhost",
+    db_port: int | None = None,
+    db_user: str = "",
+    db_password: str = "",
+    db_name: str = "",
+    ssh_remote: str | None = None,
+    ssh_key_path: str | None = None,
+    ssh_password: str | None = None,
+) -> BackupResult:
+    """Restore a database dump file to the target database.
+
+    Supports pg_restore (PostgreSQL custom format), mysql, and mongorestore.
+    If ssh_remote is set, streams the dump file into the remote DB via SSH pipe.
+    """
+    import subprocess
+    start = time.monotonic()
+
+    if not os.path.exists(dump_file):
+        return BackupResult(False, 0, 0, 0, None, False, 1, "", f"Dump file not found: {dump_file}")
+
+    dump_size = os.path.getsize(dump_file)
+    code = 1
+    output = ""
+
+    if ssh_remote and (ssh_key_path or ssh_password):
+        # ── Remote restore via SSH ────────────────────────────────────────────
+        ssh_parts = _build_ssh_prefix(ssh_key_path, ssh_password, ssh_remote)
+
+        if db_type == "postgresql":
+            # Stream local dump into remote pg_restore
+            remote_parts = ["pg_restore", "--no-owner", "--no-acl", "-d", db_name or "postgres"]
+            if db_host and db_host != "localhost":
+                remote_parts += ["-h", db_host]
+            if db_port:
+                remote_parts += ["-p", str(db_port)]
+            if db_user:
+                remote_parts += ["-U", db_user]
+            remote_cmd = " ".join(remote_parts)
+            if db_password:
+                remote_cmd = f"PGPASSWORD={repr(db_password)} {remote_cmd}"
+
+            with open(dump_file, "rb") as dump_f:
+                proc = subprocess.run(
+                    ssh_parts + [remote_cmd],
+                    stdin=dump_f,
+                    capture_output=True,
+                    timeout=7200,
+                )
+            code = proc.returncode
+            output = proc.stderr.decode(errors="replace")
+
+        elif db_type in ("mysql", "mariadb"):
+            remote_parts = ["mysql"]
+            if db_host:
+                remote_parts += ["-h", db_host]
+            if db_port:
+                remote_parts += ["-P", str(db_port)]
+            if db_user:
+                remote_parts += ["-u", db_user]
+            if db_password:
+                remote_parts += [f"-p{db_password}"]
+            remote_parts += [db_name or ""]
+            remote_cmd = " ".join(remote_parts)
+
+            with open(dump_file, "rb") as dump_f:
+                proc = subprocess.run(
+                    ssh_parts + [remote_cmd],
+                    stdin=dump_f,
+                    capture_output=True,
+                    timeout=7200,
+                )
+            code = proc.returncode
+            output = proc.stderr.decode(errors="replace")
+
+        elif db_type == "mongodb":
+            import urllib.parse
+            mongo_auth = ""
+            if db_user and db_password:
+                mongo_auth = f"{urllib.parse.quote(db_user)}:{urllib.parse.quote(db_password)}@"
+            mongo_host = db_host or "localhost"
+            mongo_port_str = f":{db_port}" if db_port else ""
+            mongo_uri = f"mongodb://{mongo_auth}{mongo_host}{mongo_port_str}/{db_name or ''}"
+
+            archive_remote = f"/tmp/mongorestore-{db_name}.archive"
+            # Copy archive to remote first, then mongorestore
+            scp_parts = _build_ssh_prefix(ssh_key_path, ssh_password, ssh_remote)
+            # Use cat + ssh to pipe file to remote tmp
+            with open(dump_file, "rb") as dump_f:
+                copy_proc = subprocess.run(
+                    ssh_parts + [f"cat > {archive_remote}"],
+                    stdin=dump_f,
+                    capture_output=True,
+                    timeout=3600,
+                )
+            if copy_proc.returncode != 0:
+                output = copy_proc.stderr.decode(errors="replace")
+                code = copy_proc.returncode
+            else:
+                remote_cmd = f"mongorestore --uri '{mongo_uri}' --archive={archive_remote} --drop && rm -f {archive_remote}"
+                restore_proc = subprocess.run(
+                    ssh_parts + [remote_cmd],
+                    capture_output=True,
+                    timeout=7200,
+                )
+                code = restore_proc.returncode
+                output = restore_proc.stderr.decode(errors="replace")
+        else:
+            return BackupResult(False, 0, 0, 0, None, False, 1, "", f"Unsupported DB type for SSH restore: {db_type}")
+
+    else:
+        # ── Local restore ─────────────────────────────────────────────────────
+        env_extra = {}
+
+        if db_type == "postgresql":
+            if db_password:
+                env_extra["PGPASSWORD"] = db_password
+            cmd = ["pg_restore", "--no-owner", "--no-acl", "-d", db_name or "postgres"]
+            if db_host and db_host != "localhost":
+                cmd += ["-h", db_host]
+            if db_port:
+                cmd += ["-p", str(db_port)]
+            if db_user:
+                cmd += ["-U", db_user]
+            cmd.append(dump_file)
+
+        elif db_type in ("mysql", "mariadb"):
+            cmd = ["mysql"]
+            if db_host:
+                cmd += ["-h", db_host]
+            if db_port:
+                cmd += ["-P", str(db_port)]
+            if db_user:
+                cmd += ["-u", db_user]
+            if db_password:
+                cmd += [f"-p{db_password}"]
+            cmd += [db_name or ""]
+            # mysql reads from stdin
+            env = {**os.environ, **env_extra}
+            with open(dump_file, "rb") as dump_f:
+                result_proc = subprocess.run(
+                    cmd, stdin=dump_f, capture_output=True, text=True, timeout=7200, env=env
+                )
+            code = result_proc.returncode
+            output = result_proc.stdout + result_proc.stderr
+            duration = time.monotonic() - start
+            safe_output = _sanitize_log(output, [db_password, ssh_password])
+            return BackupResult(
+                success=code == 0,
+                bytes_processed=dump_size,
+                bytes_added=dump_size if code == 0 else 0,
+                duration_seconds=duration,
+                snapshot_id=os.path.basename(dump_file),
+                checksum_valid=code == 0,
+                failed_chunks=0 if code == 0 else 1,
+                log_output=safe_output[:8000],
+                error_message=None if code == 0 else safe_output[-2000:],
+            )
+
+        elif db_type == "mongodb":
+            import urllib.parse
+            mongo_auth = ""
+            if db_user and db_password:
+                mongo_auth = f"{urllib.parse.quote(db_user)}:{urllib.parse.quote(db_password)}@"
+            mongo_host = db_host or "localhost"
+            mongo_port_str = f":{db_port}" if db_port else ""
+            mongo_uri = f"mongodb://{mongo_auth}{mongo_host}{mongo_port_str}/{db_name or ''}"
+            cmd = ["mongorestore", "--uri", mongo_uri, f"--archive={dump_file}", "--drop"]
+
+        else:
+            return BackupResult(False, 0, 0, 0, None, False, 1, "", f"Unsupported database type: {db_type}")
+
+        env = {**os.environ, **env_extra}
+        result_proc = subprocess.run(cmd, capture_output=True, text=True, timeout=7200, env=env)
+        code = result_proc.returncode
+        output = result_proc.stdout + result_proc.stderr
+
+    duration = time.monotonic() - start
+    safe_output = _sanitize_log(output or "", [db_password, ssh_password])
+    return BackupResult(
+        success=code == 0,
+        bytes_processed=dump_size,
+        bytes_added=dump_size if code == 0 else 0,
+        duration_seconds=duration,
+        snapshot_id=os.path.basename(dump_file),
+        checksum_valid=code == 0,
+        failed_chunks=0 if code == 0 else 1,
+        log_output=safe_output[:8000],
+        error_message=None if code == 0 else safe_output[-2000:],
+    )

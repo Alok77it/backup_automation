@@ -20,6 +20,7 @@ from app.models.entities import (
     Server,
 )
 from app.services.backup_engines import (
+    run_database_restore,
     run_database_backup,
     run_docker_backup,
     run_rclone_backup,
@@ -556,5 +557,103 @@ def run_scheduled_backups() -> dict:
     except Exception as exc:
         logger.exception("run_scheduled_backups crashed: %s", exc)
         return {"triggered": triggered, "error": str(exc)}
+    finally:
+        session.close()
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=60)
+def execute_db_restore_job(self, job_id: str) -> dict:
+    """Restore a database dump file to the destination DB (local or via SSH)."""
+    session = _sync_session()
+    try:
+        from app.models.entities import RestoreJob
+
+        job = session.get(RestoreJob, uuid.UUID(job_id))
+        if not job:
+            return {"error": "Job not found"}
+
+        job.status = JobStatus.RUNNING
+        job.started_at = datetime.now(timezone.utc)
+        job.celery_task_id = self.request.id
+        session.commit()
+
+        # ai_analysis_json holds the destination details set by the API
+        meta = job.ai_analysis_json or {}
+        dump_file = meta.get("dump_file", "")
+        db_type    = meta.get("db_type", "postgresql")
+        db_host    = meta.get("db_host", "localhost")
+        db_port    = meta.get("db_port") or None
+        db_user    = meta.get("db_user", "")
+        db_name    = meta.get("db_name", "")
+
+        # Decrypt destination DB password
+        _enc_pw = meta.get("db_password_enc", "")
+        db_password = decrypt_secret(_enc_pw) if _enc_pw else ""
+
+        if not dump_file or not os.path.exists(dump_file):
+            job.status = JobStatus.FAILED
+            job.error_message = f"Dump file not found: {dump_file}"
+            job.completed_at = datetime.now(timezone.utc)
+            session.commit()
+            return {"error": "dump_file missing"}
+
+        # Resolve SSH credentials for destination server (optional)
+        dest_server_id = meta.get("dest_server_id")
+        ssh_remote = None
+        ssh_key_path = None
+        ssh_password = None
+
+        if dest_server_id:
+            dest_server = session.get(Server, uuid.UUID(dest_server_id))
+            if dest_server:
+                _ssh_pw = decrypt_secret(dest_server.encrypted_password) if dest_server.encrypted_password else None
+                _priv_key = decrypt_secret(dest_server.encrypted_private_key) if dest_server.encrypted_private_key else None
+                ssh_remote = f"{dest_server.username}@{dest_server.hostname}"
+                ssh_password = _ssh_pw
+                if _priv_key:
+                    import tempfile
+                    kf = tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False)
+                    kf.write(_priv_key)
+                    kf.close()
+                    os.chmod(kf.name, 0o600)
+                    ssh_key_path = kf.name
+
+        try:
+            result = run_database_restore(
+                dump_file=dump_file,
+                db_type=db_type,
+                db_host=db_host,
+                db_port=db_port,
+                db_user=db_user,
+                db_password=db_password,
+                db_name=db_name,
+                ssh_remote=ssh_remote,
+                ssh_key_path=ssh_key_path,
+                ssh_password=ssh_password,
+            )
+        finally:
+            if ssh_key_path and os.path.exists(ssh_key_path):
+                os.unlink(ssh_key_path)
+
+        job.status = JobStatus.COMPLETED if result.success else JobStatus.FAILED
+        job.log_output = result.log_output
+        job.error_message = result.error_message
+        job.completed_at = datetime.now(timezone.utc)
+        session.commit()
+        return {"status": job.status.value, "job_id": str(job.id)}
+
+    except Exception as exc:
+        logger.exception("DB restore task failed: %s", exc)
+        try:
+            from app.models.entities import RestoreJob
+            job = session.get(RestoreJob, uuid.UUID(job_id))
+            if job:
+                job.status = JobStatus.FAILED
+                job.error_message = str(exc)
+                job.completed_at = datetime.now(timezone.utc)
+                session.commit()
+        except Exception:
+            pass
+        raise self.retry(exc=exc)
     finally:
         session.close()

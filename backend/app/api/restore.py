@@ -12,7 +12,7 @@ from app.schemas.resources import RestoreAnalysis, RestoreCreate, RestoreJobResp
 from app.services.ai_service import get_ai_response
 from app.services.health_engine import analyze_restore_readiness, calculate_backup_health
 from app.services.logging_service import create_log
-from app.workers.backup_tasks import execute_restore_job
+from app.workers.backup_tasks import execute_restore_job, execute_db_restore_job
 
 router = APIRouter(prefix="/restore", tags=["restore"])
 
@@ -181,3 +181,97 @@ async def get_restore_progress(
         "error_message": job.error_message,
         "log_tail": job.log_output[-500:] if job.log_output else None,
     }
+
+
+# ── Database restore ──────────────────────────────────────────────────────────
+
+from pydantic import BaseModel as _BM
+
+
+class DatabaseRestoreRequest(_BM):
+    backup_run_id: uuid.UUID          # which DB backup run to restore from
+    db_type: str = "postgresql"
+    db_host: str = "localhost"
+    db_port: int | None = None
+    db_user: str
+    db_password: str
+    db_name: str
+    dest_server_id: uuid.UUID | None = None   # SSH to this server for remote restore
+
+
+@router.post("/database", response_model=RestoreJobResponse, dependencies=[Depends(verify_csrf)])
+async def create_db_restore(
+    data: DatabaseRestoreRequest,
+    db: DbSession,
+    membership: Annotated[OrganizationMember, Depends(require_permission("restore:execute"))],
+):
+    """Restore a database dump to the destination database.
+
+    Finds the dump file from the completed DB backup run, then calls
+    pg_restore / mysql / mongorestore — either locally or via SSH.
+    """
+    from app.core.security import encrypt_secret
+    from app.models.entities import BackupType
+
+    # Validate the backup run belongs to this org and is a completed DB backup
+    run_result = await db.execute(
+        select(BackupRun)
+        .join(Backup, BackupRun.backup_id == Backup.id)
+        .where(
+            BackupRun.id == data.backup_run_id,
+            Backup.organization_id == membership.organization_id,
+            Backup.backup_type == BackupType.DATABASE,
+        )
+    )
+    run = run_result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(status_code=404, detail="DB backup run not found")
+    if run.status.value != "completed":
+        raise HTTPException(status_code=400, detail=f"Backup run is {run.status.value}, not completed")
+
+    # Locate the dump file — snapshot_id holds the filename
+    backup = await db.get(Backup, run.backup_id)
+    if not backup or not backup.target_path:
+        raise HTTPException(status_code=404, detail="Backup record missing target path")
+
+    # snapshot_id is the basename of the dump file set in backup_engines.py
+    dump_file = os.path.join(backup.target_path, run.snapshot_id) if run.snapshot_id else None
+    if not dump_file:
+        raise HTTPException(status_code=400, detail="Dump file path could not be determined")
+
+    # Encrypt destination password before storing in RestoreJob metadata
+    encrypted_pw = encrypt_secret(data.db_password) if data.db_password else ""
+
+    job = RestoreJob(
+        backup_id=backup.id,
+        backup_run_id=run.id,
+        initiated_by_id=membership.user_id,
+        status=JobStatus.PENDING,
+        target_path=dump_file,        # informational — actual target is the DB
+        overwrite_protection=False,
+        restore_confidence=80,
+        estimated_duration_seconds=60,
+        dependency_warnings=[],
+        corruption_risks=[],
+        ai_analysis_json={
+            "restore_type": "database",
+            "dump_file": dump_file,
+            "db_type": data.db_type,
+            "db_host": data.db_host,
+            "db_port": data.db_port,
+            "db_user": data.db_user,
+            "db_password_enc": encrypted_pw,
+            "db_name": data.db_name,
+            "dest_server_id": str(data.dest_server_id) if data.dest_server_id else None,
+        },
+    )
+    db.add(job)
+    await db.flush()
+
+    execute_db_restore_job.delay(str(job.id))
+    await create_log(
+        db, membership.organization_id, "restore",
+        f"DB restore job created: {data.db_type}/{data.db_name}",
+        backup_id=backup.id,
+    )
+    return RestoreJobResponse.model_validate(job)
