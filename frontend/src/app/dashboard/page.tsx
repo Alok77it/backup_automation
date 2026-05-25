@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Server, HardDrive, AlertTriangle, Database, Shield, Brain } from "lucide-react";
+import { Server, HardDrive, AlertTriangle, Database, Shield } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { MetricCard } from "@/components/dashboard/metric-card";
@@ -47,7 +47,6 @@ export default function DashboardPage() {
         <MetricCard title="Failed Jobs (24h)" value={stats?.failed_jobs_24h ?? 0} icon={AlertTriangle} subtitle="Requires attention" delay={0.1} />
         <MetricCard title="Storage Used" value={formatBytes(stats?.storage_used_bytes ?? 0)} icon={Database} subtitle={`${storagePct.toFixed(1)}% of quota`} delay={0.15} />
         <MetricCard title="Restore Readiness" value={formatPercent(stats?.restore_readiness_avg ?? 0)} icon={Shield} delay={0.2} />
-        <MetricCard title="AI Risk Alerts" value={stats?.ai_risk_alerts ?? 0} icon={Brain} subtitle={`Health avg: ${(stats?.backup_health_avg ?? 0).toFixed(0)}%`} delay={0.25} />
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">

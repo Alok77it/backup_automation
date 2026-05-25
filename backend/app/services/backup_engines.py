@@ -11,6 +11,21 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def _sanitize_log(output: str, secrets: list[str]) -> str:
+    """Replace any secret values that may have leaked into log output with [REDACTED]."""
+    import re
+    for secret in secrets:
+        if secret:
+            output = output.replace(secret, "[REDACTED]")
+            # Also catch URL-encoded or repr()-wrapped forms
+            output = re.sub(re.escape(repr(secret)), "[REDACTED]", output)
+    # Catch PGPASSWORD= patterns in shell output
+    output = re.sub(r"PGPASSWORD=\S+", "PGPASSWORD=[REDACTED]", output)
+    # Catch -p<password> mysql patterns
+    output = re.sub(r"-p\S{3,}", "-p[REDACTED]", output)
+    return output
+
+
 @dataclass
 class BackupResult:
     success: bool
@@ -262,25 +277,155 @@ def run_database_backup(
     db_type: str,
     connection_string: str,
     target_file: str,
+    db_host: str = "localhost",
+    db_port: int | None = None,
+    db_user: str = "",
+    db_password: str = "",
+    db_name: str = "",
+    ssh_remote: str | None = None,
+    ssh_key_path: str | None = None,
+    ssh_password: str | None = None,
 ) -> BackupResult:
-    """Dump a database to a file using the appropriate CLI tool."""
-    start = time.monotonic()
-    os.makedirs(os.path.dirname(target_file), exist_ok=True)
-    cmd: list[str] = []
-    if db_type == "postgresql":
-        cmd = ["pg_dump", connection_string, "-Fc", "-f", target_file]
-    elif db_type == "mysql":
-        cmd = ["mysqldump", *connection_string.split(), f"--result-file={target_file}"]
-    elif db_type == "mongodb":
-        cmd = ["mongodump", "--uri", connection_string, f"--archive={target_file}"]
-    elif db_type == "redis":
-        cmd = ["redis-cli", "-u", connection_string, "--rdb", target_file]
-    else:
-        return BackupResult(False, 0, 0, 0, None, False, 0, "", f"Unsupported database: {db_type}")
+    """Dump a database to a file using the appropriate CLI tool.
 
-    code, output, _ = _run_command(cmd)
+    If ssh_remote is set, runs the dump command remotely via SSH and streams
+    the output locally (using pg_dump | ssh style for PostgreSQL).
+    """
+    import tempfile
+    start = time.monotonic()
+    os.makedirs(os.path.dirname(target_file) if os.path.dirname(target_file) else ".", exist_ok=True)
+
+    def _build_pg_cmd() -> list[str]:
+        cmd = ["pg_dump"]
+        if db_host and db_host != "localhost":
+            cmd += ["-h", db_host]
+        if db_port:
+            cmd += ["-p", str(db_port)]
+        if db_user:
+            cmd += ["-U", db_user]
+        cmd += ["-Fc", db_name or "postgres", "-f", target_file]
+        return cmd
+
+    def _build_mysql_cmd() -> list[str]:
+        cmd = ["mysqldump"]
+        if db_host:
+            cmd += ["-h", db_host]
+        if db_port:
+            cmd += ["-P", str(db_port)]
+        if db_user:
+            cmd += ["-u", db_user]
+        if db_password:
+            cmd += [f"-p{db_password}"]
+        cmd += [db_name or "", f"--result-file={target_file}"]
+        return cmd
+
+    if ssh_remote and (ssh_key_path or ssh_password):
+        # Run dump command on remote server via SSH, pipe output locally
+        if db_type == "postgresql":
+            # Build remote pg_dump that outputs to stdout, capture locally
+            remote_parts = ["pg_dump"]
+            if db_host and db_host != "localhost":
+                remote_parts += ["-h", db_host]
+            if db_port:
+                remote_parts += ["-p", str(db_port)]
+            if db_user:
+                remote_parts += ["-U", db_user]
+            remote_parts += ["-Fc", db_name or "postgres"]
+            remote_cmd = " ".join(remote_parts)
+            if db_password:
+                remote_cmd = f"PGPASSWORD={repr(db_password)} {remote_cmd}"
+
+            ssh_parts = _build_ssh_prefix(ssh_key_path, ssh_password, ssh_remote)
+            import subprocess
+            with open(target_file, "wb") as out_f:
+                proc = subprocess.run(
+                    ssh_parts + [remote_cmd],
+                    stdout=out_f, stderr=subprocess.PIPE,
+                    timeout=3600,
+                )
+            code = proc.returncode
+            output = proc.stderr.decode(errors="replace")
+
+        elif db_type in ("mysql", "mariadb"):
+            remote_parts = ["mysqldump"]
+            if db_host:
+                remote_parts += ["-h", db_host]
+            if db_port:
+                remote_parts += ["-P", str(db_port)]
+            if db_user:
+                remote_parts += ["-u", db_user]
+            if db_password:
+                remote_parts += [f"-p{db_password}"]
+            remote_parts += [db_name or ""]
+            remote_cmd = " ".join(remote_parts)
+
+            ssh_parts = _build_ssh_prefix(ssh_key_path, ssh_password, ssh_remote)
+            import subprocess
+            with open(target_file, "wb") as out_f:
+                proc = subprocess.run(
+                    ssh_parts + [remote_cmd],
+                    stdout=out_f, stderr=subprocess.PIPE,
+                    timeout=3600,
+                )
+            code = proc.returncode
+            output = proc.stderr.decode(errors="replace")
+
+        elif db_type == "mongodb":
+            archive_remote = f"/tmp/mongodump-{db_name}.archive"
+            # Build URI from components (never use plaintext connection_string)
+            mongo_auth = ""
+            if db_user and db_password:
+                import urllib.parse
+                mongo_auth = f"{urllib.parse.quote(db_user)}:{urllib.parse.quote(db_password)}@"
+            mongo_host = db_host or "localhost"
+            mongo_port_str = f":{db_port}" if db_port else ""
+            mongo_uri = f"mongodb://{mongo_auth}{mongo_host}{mongo_port_str}/{db_name or ''}"
+            remote_cmd = f"mongodump --uri '{mongo_uri}' --archive={archive_remote} && cat {archive_remote}"
+            ssh_parts = _build_ssh_prefix(ssh_key_path, ssh_password, ssh_remote)
+            import subprocess
+            with open(target_file, "wb") as out_f:
+                proc = subprocess.run(ssh_parts + [remote_cmd], stdout=out_f, stderr=subprocess.PIPE, timeout=3600)
+            code = proc.returncode
+            output = proc.stderr.decode(errors="replace")
+
+        else:
+            return BackupResult(False, 0, 0, 0, None, False, 0, "", f"Unsupported DB type for SSH: {db_type}")
+
+    else:
+        # Local execution
+        env_extra = {}
+        if db_type == "postgresql":
+            if db_password:
+                env_extra["PGPASSWORD"] = db_password
+            cmd = _build_pg_cmd()
+        elif db_type in ("mysql", "mariadb"):
+            cmd = _build_mysql_cmd()
+        elif db_type == "mongodb":
+            import urllib.parse
+            mongo_auth = ""
+            if db_user and db_password:
+                mongo_auth = f"{urllib.parse.quote(db_user)}:{urllib.parse.quote(db_password)}@"
+            mongo_host = db_host or "localhost"
+            mongo_port_str = f":{db_port}" if db_port else ""
+            mongo_uri = f"mongodb://{mongo_auth}{mongo_host}{mongo_port_str}/{db_name or ''}"
+            cmd = ["mongodump", "--uri", mongo_uri, f"--archive={target_file}"]
+        elif db_type == "redis":
+            redis_auth = f":{db_password}@" if db_password else ""
+            redis_uri = f"redis://{redis_auth}{db_host or 'localhost'}:{db_port or 6379}"
+            cmd = ["redis-cli", "-u", redis_uri, "--rdb", target_file]
+        else:
+            return BackupResult(False, 0, 0, 0, None, False, 0, "", f"Unsupported database: {db_type}")
+
+        import subprocess
+        env = {**os.environ, **env_extra}
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, env=env)
+        code = result.returncode
+        output = result.stdout + result.stderr
+
     duration = time.monotonic() - start
     size = os.path.getsize(target_file) if os.path.exists(target_file) else 0
+    # Sanitize log output — strip any secrets that may appear
+    safe_output = _sanitize_log(output or "", [db_password, ssh_password])
     return BackupResult(
         success=code == 0 and size > 0,
         bytes_processed=size,
@@ -289,9 +434,28 @@ def run_database_backup(
         snapshot_id=os.path.basename(target_file),
         checksum_valid=code == 0,
         failed_chunks=0 if code == 0 else 1,
-        log_output=output,
-        error_message=None if code == 0 else output[-2000:],
+        log_output=safe_output[:8000],
+        error_message=None if code == 0 and size > 0 else (safe_output[-2000:] if safe_output else f"Empty dump file after {db_type} backup"),
     )
+
+
+def _build_ssh_prefix(ssh_key_path: str | None, ssh_password: str | None, remote: str) -> list[str]:
+    """Build the ssh command prefix for remote execution."""
+    if ssh_key_path:
+        return [
+            "ssh", "-i", ssh_key_path,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=15",
+            remote,
+        ]
+    elif ssh_password:
+        return [
+            "sshpass", "-p", ssh_password,
+            "ssh", "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=15",
+            remote,
+        ]
+    return ["ssh", "-o", "StrictHostKeyChecking=no", remote]
 
 
 def run_docker_backup(

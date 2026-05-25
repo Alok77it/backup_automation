@@ -159,6 +159,8 @@ class BackupRunResponse(BaseModel):
     failed_chunks: int
     error_message: str | None
     snapshot_id: str | None
+    log_output: str | None = None
+    metadata_json: dict | None = None
 
     model_config = {"from_attributes": True}
 
@@ -225,6 +227,7 @@ class RestoreJobResponse(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     error_message: str | None
+    log_output: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -349,3 +352,16 @@ class BillingInfo(BaseModel):
     backups_count: int
     billing_cycle: str = "monthly"
     next_invoice_date: datetime | None = None
+
+
+class DatabaseBackupRequest(BaseModel):
+    name: str | None = None
+    server_id: uuid.UUID | None = None
+    db_type: str = "postgresql"  # postgresql | mysql | mariadb | mongodb
+    db_host: str = "localhost"
+    db_port: int = 5432
+    db_user: str
+    db_password: str
+    db_name: str
+    target_path: str | None = None
+    compression: bool = True

@@ -8,9 +8,10 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.dependencies import DbSession, require_permission, verify_csrf
+from app.core.security import encrypt_secret
 from app.models.entities import OrganizationMember
 from app.models.entities import Backup, BackupRun, JobStatus
-from app.schemas.resources import BackupCreate, BackupResponse, BackupRunResponse
+from app.schemas.resources import BackupCreate, BackupResponse, BackupRunResponse, DatabaseBackupRequest
 from app.services.audit import log_audit
 from app.services.logging_service import create_log
 from app.workers.backup_tasks import execute_backup_run
@@ -49,6 +50,143 @@ async def _backup_response(db, backup: Backup) -> BackupResponse:
         last_run_status=last_run.status.value if last_run else None,
         last_run_at=last_run.started_at if last_run else None,
     )
+
+
+@router.get("/database/jobs")
+async def list_database_backup_jobs(
+    db: DbSession,
+    membership: Annotated[OrganizationMember, Depends(require_permission("backup:read"))],
+    limit: int = 50,
+):
+    """List all database backup jobs for this organization."""
+    from app.models.entities import BackupType
+    result = await db.execute(
+        select(BackupRun, Backup)
+        .join(Backup, BackupRun.backup_id == Backup.id)
+        .where(
+            Backup.organization_id == membership.organization_id,
+            Backup.backup_type == BackupType.DATABASE,
+        )
+        .order_by(BackupRun.started_at.desc())
+        .limit(limit)
+    )
+    rows = result.all()
+    items = []
+    for run, backup in rows:
+        r = BackupRunResponse.model_validate(run)
+        cfg = backup.config_json or {}
+        if r.metadata_json is None:
+            r.metadata_json = {}
+        r.metadata_json.update({
+            "backup_name": backup.name,
+            "db_type": cfg.get("db_type", ""),
+            "db_name": cfg.get("db_name", ""),
+            "db_host": cfg.get("db_host", ""),
+            "target_path": backup.target_path,
+        })
+        items.append(r)
+    return items
+
+
+@router.get("/runs/all", response_model=list[BackupRunResponse])
+async def list_all_runs(
+    db: DbSession,
+    membership: Annotated[OrganizationMember, Depends(require_permission("backup:read"))],
+    server_id: str | None = None,
+    limit: int = 100,
+):
+    """List all recent backup runs across the org, optionally filtered by server."""
+    q = (
+        select(BackupRun)
+        .join(Backup, BackupRun.backup_id == Backup.id)
+        .where(Backup.organization_id == membership.organization_id)
+        .order_by(BackupRun.started_at.desc())
+    )
+    if server_id:
+        try:
+            from uuid import UUID as _UUID
+            sid = _UUID(server_id)
+            q = q.where(Backup.server_id == sid)
+        except Exception:
+            pass
+    q = q.limit(limit)
+    result = await db.execute(q)
+    runs = result.scalars().all()
+    
+    # Attach backup name to metadata_json for display
+    responses = []
+    for run in runs:
+        r = BackupRunResponse.model_validate(run)
+        # Fetch backup name
+        backup_obj = await db.get(Backup, run.backup_id)
+        if backup_obj:
+            if r.metadata_json is None:
+                r.metadata_json = {}
+            r.metadata_json["backup_name"] = backup_obj.name
+            r.metadata_json["server_name"] = backup_obj.server_id and str(backup_obj.server_id)
+        responses.append(r)
+    return responses
+
+
+@router.post("/database", response_model=BackupRunResponse, dependencies=[Depends(verify_csrf)])
+async def run_database_backup_direct(
+    data: "DatabaseBackupRequest",
+    db: DbSession,
+    membership: Annotated[OrganizationMember, Depends(require_permission("backup:write"))],
+):
+    """Create a one-off database backup: connects via SSH to the server and runs pg_dump/mysqldump."""
+    from app.workers.backup_tasks import execute_backup_run as _exec
+    from app.models.entities import BackupType, BackupEngine
+
+    # Create a transient Backup record for this DB backup
+    import json as _json
+    from datetime import timezone as _tz, datetime as _dt
+
+    backup_name = data.name or f"{data.db_type}-{data.db_name}-{_dt.now(_tz.utc).strftime('%Y%m%d-%H%M')}"
+
+    # Encrypt password before persisting — never store plaintext credentials
+    encrypted_pw = encrypt_secret(data.db_password) if data.db_password else ""
+
+    import os as _os
+    default_target = _os.path.join(settings.BACKUP_STORAGE_PATH, str(membership.organization_id), "database")
+    backup = Backup(
+        organization_id=membership.organization_id,
+        server_id=data.server_id,
+        name=backup_name,
+        backup_type=BackupType.DATABASE,
+        engine=BackupEngine.RSYNC,
+        source_paths=[],
+        target_path=data.target_path or default_target,
+        compression=data.compression,
+        encryption=False,
+        config_json={
+            "db_type": data.db_type,
+            "db_host": data.db_host,
+            "db_port": data.db_port,
+            "db_user": data.db_user,
+            "db_password_enc": encrypted_pw,  # Fernet-encrypted, never plaintext
+            "db_name": data.db_name,
+        },
+    )
+    db.add(backup)
+    await db.flush()
+
+    run = BackupRun(
+        backup_id=backup.id,
+        status=JobStatus.PENDING,
+        started_at=_dt.now(_tz.utc),
+    )
+    db.add(run)
+    await db.flush()
+
+    _exec.delay(str(run.id))
+    await create_log(
+        db, membership.organization_id, "backup",
+        f"Database backup started: {data.db_type}/{data.db_name} on server",
+        backup_id=backup.id,
+    )
+    return BackupRunResponse.model_validate(run)
+
 
 
 @router.get("", response_model=list[BackupResponse])
@@ -94,6 +232,75 @@ async def create_backup(
     await log_audit(db, membership.organization_id, "backup.create", "backup", membership.user_id, str(backup.id))
     await create_log(db, membership.organization_id, "backup", f"Backup job '{backup.name}' created", backup_id=backup.id)
     return await _backup_response(db, backup)
+
+
+@router.get("/{backup_id}/runs/{run_id}/progress")
+async def get_run_progress(
+    backup_id: uuid.UUID,
+    run_id: uuid.UUID,
+    db: DbSession,
+    membership: Annotated[OrganizationMember, Depends(require_permission("backup:read"))],
+):
+    """Return live progress info for a backup run."""
+    result = await db.execute(
+        select(BackupRun)
+        .join(Backup, BackupRun.backup_id == Backup.id)
+        .where(
+            BackupRun.id == run_id,
+            Backup.id == backup_id,
+            Backup.organization_id == membership.organization_id,
+        )
+    )
+    run = result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    import time
+    from datetime import timezone as _tz
+    elapsed = 0
+    if run.started_at:
+        started = run.started_at
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=_tz.utc)
+        if run.completed_at:
+            completed = run.completed_at
+            if completed.tzinfo is None:
+                completed = completed.replace(tzinfo=_tz.utc)
+            elapsed = (completed - started).total_seconds()
+        elif run.status.value == "running":
+            from datetime import datetime
+            elapsed = (datetime.now(_tz.utc) - started).total_seconds()
+
+    # Estimate progress from log output (rsync reports percentages)
+    progress_pct = None
+    if run.log_output:
+        import re
+        matches = re.findall(r"(\d{1,3})%", run.log_output)
+        if matches:
+            progress_pct = int(matches[-1])
+
+    if run.status.value == "completed":
+        progress_pct = 100
+    elif run.status.value == "failed":
+        progress_pct = None
+    elif run.status.value == "pending":
+        progress_pct = 0
+
+    return {
+        "run_id": str(run.id),
+        "backup_id": str(backup_id),
+        "status": run.status.value,
+        "progress_pct": progress_pct,
+        "elapsed_seconds": round(elapsed, 1),
+        "bytes_processed": run.bytes_processed,
+        "bytes_added": run.bytes_added,
+        "duration_seconds": run.duration_seconds,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "error_message": run.error_message,
+        "failed_chunks": run.failed_chunks,
+        "log_tail": run.log_output[-1000:] if run.log_output else None,
+    }
 
 
 @router.post("/{backup_id}/run", response_model=BackupRunResponse, dependencies=[Depends(verify_csrf)])

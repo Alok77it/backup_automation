@@ -172,10 +172,25 @@ def execute_backup_run(self, run_id: str) -> dict:
 
         try:
             if btype == BackupType.DATABASE:
+                db_ext = {"postgresql": ".pgdump", "mysql": ".sql", "mariadb": ".sql", "mongodb": ".archive"}.get(
+                    config.get("db_type", "postgresql"), ".dump"
+                )
+                dump_file = os.path.join(target, f"db-{run.id}{db_ext}")
+                # Decrypt the DB password — never stored plaintext
+                _enc_pw = config.get("db_password_enc", "")
+                _db_password = decrypt_secret(_enc_pw) if _enc_pw else config.get("db_password", "")
                 result = run_database_backup(
-                    config.get("db_type", "postgresql"),
-                    config.get("connection_string", ""),
-                    os.path.join(target, f"db-{run.id}.dump"),
+                    db_type=config.get("db_type", "postgresql"),
+                    connection_string="",  # not used; built internally from individual fields
+                    target_file=dump_file,
+                    db_host=config.get("db_host", "localhost"),
+                    db_port=config.get("db_port") or None,
+                    db_user=config.get("db_user", ""),
+                    db_password=_db_password,
+                    db_name=config.get("db_name", ""),
+                    ssh_remote=remote,
+                    ssh_key_path=ssh_key_path,
+                    ssh_password=password,
                 )
             elif btype == BackupType.DOCKER:
                 result = run_docker_backup(
@@ -442,27 +457,104 @@ def execute_ai_action(self, action_id: str) -> dict:
 
 @celery_app.task
 def run_scheduled_backups() -> dict:
+    """Evaluate all active backup schedules and trigger any that are due.
+
+    Called by Celery Beat every 15 minutes (see celery_app.py beat_schedule).
+    Uses a 16-minute window (960 s) so the scheduler never misses a beat even
+    with slight clock drift between beat and the task worker.
+
+    Double-fire prevention: if a BackupRun was already created for this backup
+    within the same cron window, the backup is skipped to avoid duplicates.
+    """
     session = _sync_session()
     triggered = 0
+    skipped_double = 0
+    errors = []
+
     try:
-        backups = session.execute(select(Backup).where(Backup.is_active == True, Backup.schedule_cron != None)).scalars().all()
+        backups = (
+            session.execute(
+                select(Backup).where(
+                    Backup.is_active == True,
+                    Backup.schedule_cron != None,
+                    Backup.schedule_cron != "",
+                )
+            )
+            .scalars()
+            .all()
+        )
         now = datetime.now(timezone.utc)
+
         for backup in backups:
             if not backup.schedule_cron:
                 continue
+
+            # ── 1. Check if cron fires within the current beat window ────────
             try:
                 cron = croniter(backup.schedule_cron, now)
-                prev = cron.get_prev(datetime)
-                if (now - prev).total_seconds() > 900:
+                prev: datetime = cron.get_prev(datetime)
+                # Make prev timezone-aware if needed
+                if prev.tzinfo is None:
+                    prev = prev.replace(tzinfo=timezone.utc)
+                age_seconds = (now - prev).total_seconds()
+                # Beat runs every 15 min → use 960 s window (slight overlap)
+                if age_seconds > 960:
                     continue
-            except Exception:
+            except Exception as cron_err:
+                logger.warning(
+                    "Invalid cron expression '%s' for backup %s: %s",
+                    backup.schedule_cron, backup.id, cron_err,
+                )
+                errors.append(str(backup.id))
                 continue
 
-            run = BackupRun(backup_id=backup.id, status=JobStatus.PENDING)
+            # ── 2. Double-fire prevention: skip if already triggered for this window ──
+            last_run = (
+                session.execute(
+                    select(BackupRun)
+                    .where(BackupRun.backup_id == backup.id)
+                    .order_by(BackupRun.started_at.desc(), BackupRun.id.desc())
+                    .limit(1)
+                )
+                .scalar_one_or_none()
+            )
+            if last_run:
+                last_at = last_run.started_at
+                if last_at:
+                    if last_at.tzinfo is None:
+                        last_at = last_at.replace(tzinfo=timezone.utc)
+                    # If a run was created AFTER the last cron fire time, skip
+                    if last_at >= prev:
+                        skipped_double += 1
+                        continue
+
+            # ── 3. Create and enqueue the run ─────────────────────────────────
+            run = BackupRun(
+                backup_id=backup.id,
+                status=JobStatus.PENDING,
+                started_at=datetime.now(timezone.utc),
+            )
             session.add(run)
             session.commit()
             execute_backup_run.delay(str(run.id))
             triggered += 1
-        return {"triggered": triggered}
+            logger.info(
+                "Triggered scheduled backup '%s' (id=%s) for cron='%s' prev=%s",
+                backup.name,
+                backup.id,
+                backup.schedule_cron,
+                prev.isoformat(),
+            )
+
+        logger.info(
+            "run_scheduled_backups: triggered=%d skipped_double=%d invalid_cron=%d",
+            triggered,
+            skipped_double,
+            len(errors),
+        )
+        return {"triggered": triggered, "skipped_double": skipped_double, "cron_errors": errors}
+    except Exception as exc:
+        logger.exception("run_scheduled_backups crashed: %s", exc)
+        return {"triggered": triggered, "error": str(exc)}
     finally:
         session.close()

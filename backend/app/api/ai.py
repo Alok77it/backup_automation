@@ -62,19 +62,22 @@ async def _build_context(db, org_id: uuid.UUID) -> dict:
     # Latest metric snapshot per server
     server_metrics: dict[str, dict] = {}
     for s in all_server_objs:
-        m = await db.execute(
-            select(MetricSnapshot)
-            .where(MetricSnapshot.server_id == s.id)
-            .order_by(MetricSnapshot.recorded_at.desc())
-            .limit(1)
-        )
-        snap = m.scalar_one_or_none()
-        server_metrics[str(s.id)] = {
-            "cpu": round(snap.cpu_percent or 0, 1) if snap else None,
-            "mem": round(snap.memory_percent or 0, 1) if snap else None,
-            "disk": round(snap.disk_percent or 0, 1) if snap else None,
-            "last_metric_at": snap.recorded_at.isoformat() if snap else None,
-        }
+        try:
+            m = await db.execute(
+                select(MetricSnapshot)
+                .where(MetricSnapshot.server_id == s.id)
+                .order_by(MetricSnapshot.recorded_at.desc())
+                .limit(1)
+            )
+            snap = m.scalar_one_or_none()
+            server_metrics[str(s.id)] = {
+                "cpu": round(snap.cpu_percent or 0, 1) if snap else None,
+                "mem": round(snap.memory_percent or 0, 1) if snap else None,
+                "disk": round(snap.disk_percent or 0, 1) if snap else None,
+                "last_metric_at": snap.recorded_at.isoformat() if snap else None,
+            }
+        except Exception:
+            server_metrics[str(s.id)] = {"cpu": None, "mem": None, "disk": None}
 
     all_servers = [
         {

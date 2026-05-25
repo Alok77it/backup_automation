@@ -126,3 +126,58 @@ async def list_restore_jobs(
         .limit(50)
     )
     return [RestoreJobResponse.model_validate(j) for j in result.scalars().all()]
+
+
+@router.get("/jobs/{job_id}/progress")
+async def get_restore_progress(
+    job_id: uuid.UUID,
+    db: DbSession,
+    membership: Annotated[OrganizationMember, Depends(require_permission("backup:read"))],
+):
+    """Live progress for a restore job."""
+    from app.models.entities import RestoreJob
+    from datetime import timezone as _tz, datetime as _dt
+
+    job = await db.get(RestoreJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Verify org
+    backup = await db.get(Backup, job.backup_id)
+    if not backup or backup.organization_id != membership.organization_id:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    elapsed = 0.0
+    if job.started_at:
+        started = job.started_at
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=_tz.utc)
+        if job.completed_at:
+            completed = job.completed_at
+            if completed.tzinfo is None:
+                completed = completed.replace(tzinfo=_tz.utc)
+            elapsed = (completed - started).total_seconds()
+        elif job.status.value == "running":
+            elapsed = (_dt.now(_tz.utc) - started).total_seconds()
+
+    progress_pct = None
+    if job.log_output:
+        import re
+        matches = re.findall(r"(\d{1,3})%", job.log_output)
+        if matches:
+            progress_pct = int(matches[-1])
+    if job.status.value == "completed":
+        progress_pct = 100
+    elif job.status.value == "pending":
+        progress_pct = 0
+
+    return {
+        "job_id": str(job.id),
+        "status": job.status.value,
+        "progress_pct": progress_pct,
+        "elapsed_seconds": round(elapsed, 1),
+        "started_at": job.started_at.isoformat() if job.started_at else None,
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+        "error_message": job.error_message,
+        "log_tail": job.log_output[-500:] if job.log_output else None,
+    }

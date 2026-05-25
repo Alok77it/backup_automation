@@ -12,10 +12,11 @@ import {
   Brain,
   ScrollText,
   Shield,
-  Bell,
   Database,
   Building2,
   Settings,
+  Monitor,
+  Archive,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -30,9 +31,10 @@ const navItems = [
   { href: "/ai", label: "AI Intelligence", icon: Brain },
   { href: "/logs", label: "Logs", icon: ScrollText },
   { href: "/policies", label: "Policies", icon: Shield },
-  { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/storage", label: "Storage", icon: Database },
   { href: "/organizations", label: "Organizations", icon: Building2 },
+  { href: "/database-backup", label: "DB Backup", icon: Archive },
+  { href: "/selfmonitor", label: "System Monitor", icon: Monitor },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

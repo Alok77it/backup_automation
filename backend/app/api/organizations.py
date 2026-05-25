@@ -1,3 +1,4 @@
+from pydantic import BaseModel
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -185,3 +186,121 @@ async def get_billing(
         servers_count=servers,
         backups_count=backups,
     )
+
+
+# ─── Direct user creation (no invite email needed) ───────────────────────────
+
+class CreateUserRequest(BaseModel):
+    email: str
+    full_name: str
+    password: str
+    role: str = "viewer"
+
+    @classmethod
+    def validate_password_strength(cls, password: str) -> str:
+        """Enforce minimum password strength: 8+ chars, at least 1 uppercase, 1 digit."""
+        if len(password) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        if not any(c.isupper() for c in password):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.isdigit() for c in password):
+            raise ValueError("Password must contain at least one digit")
+        return password
+
+
+class CreateUserResponse(BaseModel):
+    id: uuid.UUID
+    email: str
+    full_name: str
+    role: str
+    joined_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.post("/users", response_model=CreateUserResponse, dependencies=[Depends(verify_csrf)])
+async def create_user(
+    data: "CreateUserRequest",
+    db: DbSession,
+    membership: Annotated[OrganizationMember, Depends(require_permission("org:invite"))],
+):
+    """Create a new user and add them directly to this organization."""
+    from app.core.security import hash_password as _hash
+    from app.core.role_utils import normalize_role as _nr
+
+    # Validate password strength before proceeding
+    try:
+        CreateUserRequest.validate_password_strength(data.password)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # Check email not already taken
+    existing = await db.execute(select(User).where(User.email == data.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="A user with this email already exists")
+
+    new_user = User(
+        email=data.email,
+        full_name=data.full_name,
+        hashed_password=_hash(data.password),
+        is_verified=True,
+    )
+    db.add(new_user)
+    await db.flush()
+
+    role = _nr(data.role)
+    new_membership = OrganizationMember(
+        organization_id=membership.organization_id,
+        user_id=new_user.id,
+        role=role,
+    )
+    db.add(new_membership)
+    await db.flush()
+
+    await log_audit(
+        db,
+        membership.organization_id,
+        "user.created",
+        "user",
+        resource_id=str(new_user.id),
+    )
+
+    from datetime import datetime, timezone as _tz
+    await db.refresh(new_membership)
+    return CreateUserResponse(
+        id=new_user.id,
+        email=new_user.email,
+        full_name=new_user.full_name,
+        role=role.value if hasattr(role, "value") else str(role),
+        joined_at=new_membership.joined_at or datetime.now(_tz.utc),
+    )
+
+
+
+@router.delete("/members/{user_id}", dependencies=[Depends(verify_csrf)])
+async def remove_member(
+    user_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+    membership: Annotated[OrganizationMember, Depends(require_permission("org:manage"))],
+):
+    """Remove a member from the organization."""
+    if user_id == user.id:
+        raise HTTPException(status_code=400, detail="Cannot remove yourself")
+    result = await db.execute(
+        select(OrganizationMember).where(
+            OrganizationMember.user_id == user_id,
+            OrganizationMember.organization_id == membership.organization_id,
+        )
+    )
+    mem = result.scalar_one_or_none()
+    if not mem:
+        raise HTTPException(status_code=404, detail="Member not found")
+    # Prevent removing the org owner
+    from app.models.entities import UserRole
+    if mem.role == UserRole.OWNER:
+        raise HTTPException(status_code=400, detail="Cannot remove the organization owner")
+    await db.delete(mem)
+    await log_audit(db, membership.organization_id, "user.removed", "user", resource_id=str(user_id))
+    return {"message": "Member removed"}

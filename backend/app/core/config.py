@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_AUTH: str = "10/minute"
 
     PROMETHEUS_PORT: int = 9090
+    # Optional bearer token to protect the /metrics Prometheus scrape endpoint.
+    # Set METRICS_TOKEN in your .env to require authentication for /metrics.
+    # If unset, the endpoint is restricted to localhost (127.0.0.1 / ::1) only.
+    METRICS_TOKEN: str | None = None
 
     @field_validator("ANTHROPIC_API_KEY", "OPENAI_API_KEY", mode="before")
     @classmethod

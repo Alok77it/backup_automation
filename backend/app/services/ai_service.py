@@ -137,18 +137,32 @@ async def get_ai_response(
 
     context_block = ""
     if context:
-        context_json = json.dumps(context, indent=2, default=str)
-        # Trim very long contexts — keep the most recent/important data
-        if len(context_json) > 12000:
-            context_json = context_json[:12000] + "\n... (truncated)"
+        # Only include the most critical context to keep tokens manageable
+        trimmed = {
+            "servers": context.get("all_servers", [])[:10],
+            "servers_at_risk": context.get("servers_at_risk", [])[:5],
+            "backups_at_risk": context.get("backups_at_risk", [])[:5],
+            "recent_failures": context.get("recent_failures", [])[:5],
+            "recent_errors": context.get("recent_errors", [])[:10],
+            "unresolved_alerts": context.get("unresolved_alerts", 0),
+            "storage_used_gb": context.get("storage_used_gb", 0),
+            "storage_quota_gb": context.get("storage_quota_gb", 100),
+            "avg_restore_confidence": context.get("avg_restore_confidence", 0),
+        }
+        context_json = json.dumps(trimmed, indent=2, default=str)
+        if len(context_json) > 8000:
+            context_json = context_json[:8000] + "\n... (truncated for token limit)"
         context_block = (
-            f"\n\n---\n## Live System Context\n```json\n{context_json}\n```\n---"
+            f"\n\n---\n## Live System Context (real-time data)\n```json\n{context_json}\n```\n---"
         )
 
     messages: list[dict[str, str]] = []
     if conversation_history:
-        for msg in conversation_history[-20:]:
-            messages.append({"role": msg["role"], "content": msg["content"]})
+        # Skip the very last message since it's the current user message we're about to add
+        history = conversation_history[:-1] if conversation_history else []
+        for msg in history[-18:]:
+            if msg.get("role") in ("user", "assistant") and msg.get("content"):
+                messages.append({"role": msg["role"], "content": msg["content"]})
     messages.append({"role": "user", "content": user_message + context_block})
 
     try:

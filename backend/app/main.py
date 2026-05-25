@@ -10,7 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.api import ai, alerts, auth, backups, dashboard, logs, monitoring, organizations, policies, restore, servers, storage
+from app.api import ai, alerts, auth, backups, dashboard, logs, monitoring, organizations, policies, restore, servers, storage, selfmonitor
 from app.core.config import get_settings
 from app.core.database import engine
 
@@ -79,6 +79,7 @@ app.include_router(logs.router, prefix="/api")
 app.include_router(monitoring.router, prefix="/api")
 app.include_router(storage.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
+app.include_router(selfmonitor.router, prefix="/api")
 
 
 @app.get("/api/health")
@@ -86,8 +87,29 @@ async def health_check():
     return {"status": "healthy", "service": "backup-intelligence-api"}
 
 
+_LOCALHOST_IPS = {"127.0.0.1", "::1", "localhost"}
+
+
 @app.get("/metrics")
-async def prometheus_metrics():
+async def prometheus_metrics(request: Request):
+    """Prometheus scrape endpoint.
+
+    Access policy (in order):
+    1. If METRICS_TOKEN is configured, require  Authorization: Bearer <token>
+    2. Otherwise restrict to localhost scrapers only.
+    This prevents leaking system metrics to unauthenticated external callers.
+    """
+    from fastapi import HTTPException as _HTTPException
+
+    metrics_token = settings.METRICS_TOKEN
+    if metrics_token:
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer ") or auth_header[7:] != metrics_token:
+            raise _HTTPException(status_code=401, detail="Unauthorized")
+    else:
+        client_host = request.client.host if request.client else ""
+        if client_host not in _LOCALHOST_IPS:
+            raise _HTTPException(status_code=403, detail="Metrics endpoint restricted to localhost")
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
