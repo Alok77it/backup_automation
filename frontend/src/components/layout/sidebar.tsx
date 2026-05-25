@@ -15,7 +15,6 @@ import {
   Bell,
   Database,
   Building2,
-  CreditCard,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -34,7 +33,6 @@ const navItems = [
   { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/storage", label: "Storage", icon: Database },
   { href: "/organizations", label: "Organizations", icon: Building2 },
-  { href: "/billing", label: "Billing", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

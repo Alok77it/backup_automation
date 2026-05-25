@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from croniter import croniter
 from sqlalchemy import create_engine, select
@@ -32,6 +32,83 @@ from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+def _apply_retention(session: Session, backup: "Backup") -> None:
+    """Delete old BackupRun records (and their on-disk snapshot dirs) according
+    to the backup's linked policy (retention_days + retention_count).
+    Runs that are still RUNNING or PENDING are never removed.
+    """
+    from app.models.entities import BackupPolicy
+
+    if not backup.policy_id:
+        return
+
+    policy: BackupPolicy | None = session.get(BackupPolicy, backup.policy_id)
+    if not policy or not policy.cleanup_enabled:
+        return
+
+    # Fetch all finished runs sorted newest-first
+    all_runs = (
+        session.execute(
+            select(BackupRun)
+            .where(
+                BackupRun.backup_id == backup.id,
+                BackupRun.status.in_([JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]),
+            )
+            .order_by(BackupRun.started_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+
+    to_delete: list[BackupRun] = []
+
+    # retention_count: keep only the N most recent runs
+    if policy.retention_count and policy.retention_count > 0:
+        excess = all_runs[policy.retention_count:]
+        to_delete.extend(excess)
+
+    # retention_days: also delete runs older than N days (may overlap with above)
+    if policy.retention_days and policy.retention_days > 0:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=policy.retention_days)
+        for run in all_runs:
+            started = run.started_at
+            if started and started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            if started and started < cutoff and run not in to_delete:
+                to_delete.append(run)
+
+    if not to_delete:
+        return
+
+    deleted_ids = []
+    for run in to_delete:
+        # Best-effort: remove per-run snapshot directory if it exists
+        if run.snapshot_id:
+            snap_dir = os.path.join(
+                settings.BACKUP_STORAGE_PATH,
+                str(backup.organization_id),
+                str(backup.id),
+                str(run.snapshot_id),
+            )
+            if os.path.isdir(snap_dir):
+                import shutil
+                try:
+                    shutil.rmtree(snap_dir)
+                except Exception as exc:
+                    logger.warning("Could not remove snapshot dir %s: %s", snap_dir, exc)
+        session.delete(run)
+        deleted_ids.append(str(run.id))
+
+    session.commit()
+    logger.info(
+        "Retention applied for backup %s: removed %d run(s) [policy: %d days / %d max]",
+        backup.id,
+        len(deleted_ids),
+        policy.retention_days,
+        policy.retention_count,
+    )
 
 
 def _sync_session() -> Session:
@@ -183,6 +260,12 @@ def execute_backup_run(self, run_id: str) -> dict:
         backup.risk_level = health.risk_level
         backup.corruption_probability = health.corruption_probability
         session.commit()
+
+        # Apply retention policy — prune old runs after every successful backup
+        try:
+            _apply_retention(session, backup)
+        except Exception as retention_err:
+            logger.warning("Retention cleanup failed (non-fatal): %s", retention_err)
 
         return {"status": run.status.value, "run_id": str(run.id)}
     except Exception as e:

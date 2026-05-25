@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { RotateCcw, Shield, AlertTriangle } from "lucide-react";
+import { RotateCcw, Shield, AlertTriangle, Lock, LockOpen } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { PageHero } from "@/components/ui/page-hero";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,6 +55,7 @@ export default function RestorePage() {
   const [analysis, setAnalysis] = useState<RestoreAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [overwriteProtection, setOverwriteProtection] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -83,7 +84,7 @@ export default function RestorePage() {
       backup_id: selected,
       target_path: targetPath,
       target_server_id: serverId,
-      overwrite_protection: true,
+      overwrite_protection: overwriteProtection,
     };
   }
 
@@ -177,6 +178,35 @@ export default function RestorePage() {
             )}
 
             <Input label="Restore path" placeholder="/restore" value={targetPath} onChange={(e) => setTargetPath(e.target.value)} />
+
+            {/* Overwrite protection toggle */}
+            <button
+              type="button"
+              onClick={() => setOverwriteProtection((prev) => !prev)}
+              className={`flex w-full items-center gap-3 rounded-xl border p-3 text-sm font-medium transition-all ${
+                overwriteProtection
+                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                  : "border-red-200 bg-red-50 text-red-700"
+              }`}
+            >
+              {overwriteProtection ? (
+                <Lock className="h-4 w-4 shrink-0 text-amber-600" />
+              ) : (
+                <LockOpen className="h-4 w-4 shrink-0 text-red-500" />
+              )}
+              <span className="flex-1 text-left">
+                {overwriteProtection
+                  ? "Overwrite protection ON — restore will fail if target is not empty"
+                  : "Overwrite protection OFF — existing files will be overwritten"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                  overwriteProtection ? "bg-amber-200 text-amber-800" : "bg-red-200 text-red-700"
+                }`}
+              >
+                {overwriteProtection ? "Protected" : "Overwrite"}
+              </span>
+            </button>
 
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={runAnalysis} disabled={!selected || analyzing}>
