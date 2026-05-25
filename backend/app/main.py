@@ -89,15 +89,25 @@ async def health_check():
 
 _LOCALHOST_IPS = {"127.0.0.1", "::1", "localhost"}
 
+# Docker internal networks — Prometheus runs in the same compose network
+# RFC1918 private ranges: 10.x.x.x, 172.16-31.x.x, 192.168.x.x
+def _is_private_ip(host: str) -> bool:
+    import ipaddress
+    try:
+        ip = ipaddress.ip_address(host)
+        return ip.is_private or ip.is_loopback
+    except ValueError:
+        return host in _LOCALHOST_IPS
+
 
 @app.get("/metrics")
 async def prometheus_metrics(request: Request):
     """Prometheus scrape endpoint.
 
     Access policy (in order):
-    1. If METRICS_TOKEN is configured, require  Authorization: Bearer <token>
-    2. Otherwise restrict to localhost scrapers only.
-    This prevents leaking system metrics to unauthenticated external callers.
+    1. If METRICS_TOKEN is configured, require Authorization: Bearer <token>
+    2. Otherwise allow only private/loopback IPs (localhost + Docker internal network).
+       This blocks external internet scrapers while allowing Prometheus container access.
     """
     from fastapi import HTTPException as _HTTPException
 
@@ -108,8 +118,8 @@ async def prometheus_metrics(request: Request):
             raise _HTTPException(status_code=401, detail="Unauthorized")
     else:
         client_host = request.client.host if request.client else ""
-        if client_host not in _LOCALHOST_IPS:
-            raise _HTTPException(status_code=403, detail="Metrics endpoint restricted to localhost")
+        if not _is_private_ip(client_host):
+            raise _HTTPException(status_code=403, detail="Metrics endpoint restricted to internal network")
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
