@@ -1233,6 +1233,7 @@ echo "[PKG] Done."`;
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 type TabId = "install" | "installed" | "github" | "packages" | "credentials";
+type ListResponse<T> = T[] | { items?: T[] };
 
 export default function DevOpsToolsPage() {
   const [servers, setServers] = useState<ServerType[]>([]);
@@ -1245,9 +1246,9 @@ export default function DevOpsToolsPage() {
   async function loadAll() {
     try {
       const [srvData, crdData, instData] = await Promise.all([
-        api("/servers"),
-        api("/devops-tools/credentials"),
-        api("/plugins/installations"),
+        api<ListResponse<ServerType>>("/servers"),
+        api<ListResponse<StoredCredential>>("/devops-tools/credentials"),
+        api<ListResponse<PluginInstallation>>("/plugins/installations"),
       ]);
       setServers(Array.isArray(srvData) ? srvData : (srvData.items ?? []));
       setCredentials(Array.isArray(crdData) ? crdData : (crdData.items ?? []));
