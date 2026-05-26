@@ -1,5 +1,5 @@
 """
-Container Management API — READ-ONLY
+Container Management API -- READ-ONLY
 ======================================
 Exposes container visibility data. Never modifies Docker runtime.
 """
@@ -13,17 +13,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
-from app.core.dependencies import DbSession, OrgMembership, require_permission
+from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
 from app.models.devops_entities import RiskLevel
+from app.models.entities import OrganizationMember
 from app.services.container_service import container_service
 from app.services.execution_engine import execution_engine
 
 router = APIRouter(prefix="/containers", tags=["Container Management"])
 
-
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
 
 class ContainerSnapshotOut(BaseModel):
     id: uuid.UUID
@@ -57,10 +54,6 @@ class ContainerSummaryOut(BaseModel):
     restarting: int = 0
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
-
 @router.get("", response_model=list[ContainerSnapshotOut])
 async def list_containers(
     db: DbSession,
@@ -70,10 +63,7 @@ async def list_containers(
     limit: int = 200,
     offset: int = 0,
 ):
-    """
-    List cached container snapshots. Data is refreshed by the background
-    container_poll task. Use /refresh to trigger an immediate update.
-    """
+    """List cached container snapshots."""
     return await container_service.get_snapshots(
         db,
         organization_id=membership.organization_id,
@@ -99,20 +89,17 @@ async def container_summary(
     return ContainerSummaryOut(**summary)
 
 
-@router.post("/refresh/{server_id}", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/refresh/{server_id}", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_csrf)])
 async def trigger_container_refresh(
     server_id: uuid.UUID,
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:read"))
     ],
 ):
-    """
-    Submit a LOW-risk container_poll job to immediately refresh container state.
-    Runs via agent — no Docker runtime modification.
-    """
+    """Submit a LOW-risk container_poll job to immediately refresh container state."""
     job = await execution_engine.submit_job(
         db,
         organization_id=membership.organization_id,
@@ -126,21 +113,18 @@ async def trigger_container_refresh(
     return {"message": "Container refresh scheduled", "job_id": str(job.id)}
 
 
-@router.post("/restart/{server_id}/{container_name}", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/restart/{server_id}/{container_name}", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_csrf)])
 async def restart_container(
     server_id: uuid.UUID,
     container_name: str,
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
-    """
-    Submit a MEDIUM-risk job to restart a container.
-    Does NOT require approval (MEDIUM risk) but is fully logged.
-    """
+    """Submit a MEDIUM-risk job to restart a container."""
     job = await execution_engine.submit_job(
         db,
         organization_id=membership.organization_id,

@@ -14,18 +14,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import DbSession, OrgMembership, require_permission
+from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
+from app.models.entities import OrganizationMember
 from app.models.devops_entities import DevOpsJob, JobLog, JobStatus, RiskLevel
 from app.services.execution_engine import ExecutionEngine, ExecutionError, execution_engine
 
 router = APIRouter(prefix="/execution", tags=["Execution Engine"])
 
-
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
 
 class JobSubmitRequest(BaseModel):
     server_id: uuid.UUID
@@ -69,25 +65,17 @@ class JobLogOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
-
-@router.post("/jobs", response_model=JobOut, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/jobs", response_model=JobOut, status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_csrf)])
 async def submit_job(
     body: JobSubmitRequest,
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
-    """
-    Submit a new DevOps job. HIGH-risk jobs create an approval request
-    and return status=PENDING — the job executes after admin approval.
-    MEDIUM/LOW jobs are immediately queued.
-    """
+    """Submit a new DevOps job. HIGH-risk jobs create an approval request."""
     try:
         job = await execution_engine.submit_job(
             db,
@@ -154,7 +142,6 @@ async def get_job_logs(
     membership: OrgMembership,
     limit: int = 500,
 ):
-    # Verify job belongs to org
     job_result = await db.execute(
         select(DevOpsJob).where(
             DevOpsJob.id == job_id,
@@ -173,13 +160,13 @@ async def get_job_logs(
     return list(logs_result.scalars().all())
 
 
-@router.post("/jobs/{job_id}/cancel", response_model=JobOut)
+@router.post("/jobs/{job_id}/cancel", response_model=JobOut, dependencies=[Depends(verify_csrf)])
 async def cancel_job(
     job_id: uuid.UUID,
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
@@ -194,10 +181,6 @@ async def cancel_job(
     except ExecutionError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
-# ---------------------------------------------------------------------------
-# Agent token management
-# ---------------------------------------------------------------------------
 
 class AgentTokenCreate(BaseModel):
     server_id: uuid.UUID
@@ -214,25 +197,21 @@ class AgentTokenOut(BaseModel):
     last_seen_ip: str | None
     created_at: datetime
     expires_at: datetime | None
-    raw_token: str | None = None  # Only populated on creation
+    raw_token: str | None = None
 
     model_config = {"from_attributes": True}
 
 
-@router.post("/agent-tokens", response_model=AgentTokenOut, status_code=status.HTTP_201_CREATED)
+@router.post("/agent-tokens", response_model=AgentTokenOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_csrf)])
 async def create_agent_token(
     body: AgentTokenCreate,
     db: DbSession,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
-    """
-    Generate a new agent token for a server.
-    The raw_token is returned ONCE — store it securely in your agent configuration.
-    Subsequent requests will NOT return the raw token.
-    """
+    """Generate a new agent token. The raw_token is returned ONCE."""
     from app.services.agent_comm import agent_comm
     raw_token, token = await agent_comm.create_agent_token(
         db,
@@ -251,5 +230,5 @@ async def create_agent_token(
         last_seen_ip=token.last_seen_ip,
         created_at=token.created_at,
         expires_at=token.expires_at,
-        raw_token=raw_token,  # Shown once
+        raw_token=raw_token,
     )

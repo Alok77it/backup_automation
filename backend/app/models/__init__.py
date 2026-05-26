@@ -1,4 +1,4 @@
-# DevOps Control Plane — imported so Alembic autogenerate sees all new tables
+# DevOps Control Plane -- imported so Alembic autogenerate sees all new tables
 from app.models import devops_entities as devops_entities  # noqa: F401
 
 from app.models.entities import (
@@ -37,10 +37,11 @@ __all__ = [
     "RestoreJob",
     "LogEntry",
     "Alert",
+    "AuditLog",
     "MetricSnapshot",
+    "StorageUsage",
     "AIConversation",
     "AIConversationMessage",
-    "StorageUsage",
-    "AuditLog",
     "PasswordResetToken",
+    "devops_entities",
 ]

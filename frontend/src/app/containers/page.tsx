@@ -55,9 +55,9 @@ export default function ContainersPage() {
 
   const loadData = useCallback(() => {
     setLoading(true);
-    const qs = stateFilter ? `?state=${stateFilter}` : "";
+    const qs = stateFilter ? `?state=${stateFilter}&limit=200` : "?limit=200";
     Promise.all([
-      api<ContainerSnapshot[]>(`/containers${qs}&limit=200`),
+      api<ContainerSnapshot[]>(`/containers${qs}`),
       api<ContainerSummary>("/containers/summary"),
     ])
       .then(([c, s]) => { setContainers(c); setSummary(s); })

@@ -455,18 +455,24 @@ def check_ssl_renewals() -> dict:
 async def _check_ssl_renewals_async() -> dict:
     from sqlalchemy import select
     from app.models.devops_entities import SSLCertificate, SSLStatus
-    from app.services.ssl_service import ssl_service
-    from datetime import timedelta
+    from app.models.entities import Organization
+    from datetime import timedelta, timezone
 
     renewed = 0
     async with await _get_db() as db:
-        expiring = await ssl_service.get_certificates(
-            db,
-            organization_id=uuid.uuid4(),  # placeholder — real impl queries all orgs
-            expiring_within_days=30,
+        # Query ALL active auto-renew certs expiring within 30 days across all orgs
+        threshold = datetime.now(timezone.utc) + timedelta(days=30)
+        result = await db.execute(
+            select(SSLCertificate).where(
+                SSLCertificate.auto_renew == True,
+                SSLCertificate.status == SSLStatus.ACTIVE,
+                SSLCertificate.expires_at <= threshold,
+            )
         )
+        expiring = result.scalars().all()
         logger.info("Found %d certificates due for renewal", len(expiring))
         renewed = len(expiring)
+        # TODO: for each expiring cert, submit a ssl_renew job via ExecutionEngine
 
     return {"certs_queued_for_renewal": renewed}
 

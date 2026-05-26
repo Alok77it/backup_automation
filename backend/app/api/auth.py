@@ -2,7 +2,9 @@ import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy import select
 
 from app.core.config import get_settings
@@ -167,17 +169,39 @@ async def reset_password(data: ResetPasswordRequest, db: DbSession):
     if not payload or payload.get("type") != "reset":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired token")
 
-    result = await db.execute(select(User).where(User.email == payload["sub"]))
-    user = result.scalar_one_or_none()
-    if not user:
+    email = payload.get("sub")
+    if not email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
 
+    # Validate against the DB record — prevents token reuse
+    token_hash_result = await db.execute(
+        select(PasswordResetToken)
+        .where(
+            PasswordResetToken.user_id == (
+                select(User.id).where(User.email == email).scalar_subquery()
+            ),
+            PasswordResetToken.used == False,
+            PasswordResetToken.expires_at > datetime.now(timezone.utc),
+        )
+        .order_by(PasswordResetToken.expires_at.desc())
+        .limit(1)
+    )
+    reset_record = token_hash_result.scalar_one_or_none()
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user or not reset_record:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired token")
+
+    # Mark token as used
+    reset_record.used = True
     user.hashed_password = hash_password(data.password)
+    await db.commit()
     return MessageResponse(message="Password reset successful")
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(authorization: str | None = None):
+async def refresh_token(authorization: Annotated[str | None, Header(alias="Authorization")] = None):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token required")
     token = authorization.split(" ", 1)[1]

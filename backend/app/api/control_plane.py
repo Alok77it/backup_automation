@@ -15,7 +15,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import DbSession, OrgMembership, require_permission
+from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
+from app.models.entities import OrganizationMember
 from app.models.devops_entities import (
     DevOpsAuditLog,
     ServerGroup,
@@ -97,13 +98,13 @@ async def list_server_groups(
     return out
 
 
-@router.post("/groups", response_model=ServerGroupOut, status_code=status.HTTP_201_CREATED)
+@router.post("/groups", response_model=ServerGroupOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_csrf)])
 async def create_server_group(
     body: ServerGroupCreate,
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
@@ -135,13 +136,13 @@ async def create_server_group(
     )
 
 
-@router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(verify_csrf)])
 async def delete_server_group(
     group_id: uuid.UUID,
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
@@ -159,13 +160,13 @@ async def delete_server_group(
     await db.commit()
 
 
-@router.post("/groups/{group_id}/members", status_code=status.HTTP_201_CREATED)
+@router.post("/groups/{group_id}/members", status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_csrf)])
 async def add_server_to_group(
     group_id: uuid.UUID,
     body: ServerGroupMemberAdd,
     db: DbSession,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
@@ -189,13 +190,13 @@ async def add_server_to_group(
     return {"message": "Server added to group"}
 
 
-@router.delete("/groups/{group_id}/members/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/groups/{group_id}/members/{server_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(verify_csrf)])
 async def remove_server_from_group(
     group_id: uuid.UUID,
     server_id: uuid.UUID,
     db: DbSession,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
@@ -227,14 +228,14 @@ async def get_server_tags(
     return list(result.scalars().all())
 
 
-@router.put("/servers/{server_id}/tags/{key}", response_model=ServerTagOut)
+@router.put("/servers/{server_id}/tags/{key}", response_model=ServerTagOut, dependencies=[Depends(verify_csrf)])
 async def upsert_server_tag(
     server_id: uuid.UUID,
     key: str,
     body: ServerTagSet,
     db: DbSession,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
@@ -261,13 +262,13 @@ async def upsert_server_tag(
     return tag
 
 
-@router.delete("/servers/{server_id}/tags/{key}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/servers/{server_id}/tags/{key}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(verify_csrf)])
 async def delete_server_tag(
     server_id: uuid.UUID,
     key: str,
     db: DbSession,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
@@ -305,7 +306,7 @@ class AuditLogOut(BaseModel):
 async def get_devops_audit_logs(
     db: DbSession,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("audit:read"))
     ],
     limit: int = 100,
@@ -322,7 +323,7 @@ async def get_devops_audit_logs(
     logs = result.scalars().all()
     return [
         AuditLogOut(
-            **{k: getattr(l, k) for k in AuditLogOut.model_fields},
+            **{k: getattr(l, k) for k in AuditLogOut.model_fields if k != "created_at"},
             created_at=l.created_at.isoformat(),
         )
         for l in logs

@@ -20,8 +20,6 @@ def hash_password(password: str) -> str:
 def verify_password(plain: str, hashed: str) -> bool:
     try:
         ph.verify(hashed, plain)
-        if ph.check_needs_rehash(hashed):
-            return True
         return True
     except VerifyMismatchError:
         return False

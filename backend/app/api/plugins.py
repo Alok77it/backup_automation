@@ -2,7 +2,7 @@
 Plugin System API Router
 =========================
 Browse the plugin catalog, install/uninstall tools on servers.
-All install operations create HIGH-risk DevOpsJobs (→ approval required).
+All install operations create HIGH-risk DevOpsJobs (-> approval required).
 """
 
 from __future__ import annotations
@@ -14,7 +14,8 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from app.core.dependencies import DbSession, OrgMembership, require_permission
+from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
+from app.models.entities import OrganizationMember
 from app.models.devops_entities import DevOpsPlugin, PluginInstallation, PluginStatus, RiskLevel
 from app.services.execution_engine import execution_engine
 from app.services.plugin_manager import (
@@ -25,10 +26,6 @@ from app.services.plugin_manager import (
 
 router = APIRouter(prefix="/plugins", tags=["Plugin System"])
 
-
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
 
 class PluginOut(BaseModel):
     id: str
@@ -64,14 +61,10 @@ class PluginInstallOut(BaseModel):
     error_message: str | None
     installed_at: datetime | None
     created_at: datetime
-    job_id: uuid.UUID | None = None   # approval/job created for this install
+    job_id: uuid.UUID | None = None
 
     model_config = {"from_attributes": True}
 
-
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
 
 @router.get("/catalog", response_model=list[PluginOut])
 async def get_plugin_catalog(
@@ -83,11 +76,11 @@ async def get_plugin_catalog(
     return await plugin_manager.get_catalog(db, category=category)
 
 
-@router.post("/catalog/sync", status_code=status.HTTP_200_OK)
+@router.post("/catalog/sync", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_csrf)])
 async def sync_plugin_catalog(
     db: DbSession,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("settings:write"))
     ],
 ):
@@ -120,6 +113,7 @@ async def list_installations(
     "/{plugin_id}/install",
     response_model=PluginInstallOut,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(verify_csrf)],
 )
 async def install_plugin(
     plugin_id: str,
@@ -127,16 +121,11 @@ async def install_plugin(
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
-    """
-    Request plugin installation on a server.
-    Creates a PluginInstallation record + a HIGH-risk DevOpsJob.
-    Job requires approval before execution starts.
-    Returns the installation record with the linked job_id.
-    """
+    """Request plugin installation. Creates a HIGH-risk job (approval required)."""
     try:
         install = await plugin_manager.request_install(
             db,
@@ -148,7 +137,6 @@ async def install_plugin(
             ip_address=request.client.host if request.client else None,
         )
 
-        # Submit the execution job (HIGH risk → auto-creates approval)
         job = await execution_engine.submit_job(
             db,
             organization_id=membership.organization_id,
@@ -168,12 +156,10 @@ async def install_plugin(
             ip_address=request.client.host if request.client else None,
         )
 
-        # Link job to install
         install.install_job_id = job.id
         await db.commit()
         await db.refresh(install)
 
-        # Build response with job_id included
         out = PluginInstallOut.model_validate(install)
         out.job_id = job.id
         return out
@@ -187,6 +173,7 @@ async def install_plugin(
 @router.post(
     "/{plugin_id}/uninstall/{server_id}",
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(verify_csrf)],
 )
 async def uninstall_plugin(
     plugin_id: str,
@@ -194,7 +181,7 @@ async def uninstall_plugin(
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):

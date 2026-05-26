@@ -137,6 +137,7 @@ class ExecutionEngine:
             queued_at=None if requires_approval else datetime.now(timezone.utc),
         )
         db.add(job)
+        await db.flush()  # get job.id before writing audit log
 
         await self._write_audit(
             db,
@@ -145,7 +146,7 @@ class ExecutionEngine:
             server_id=server_id,
             action="job.created",
             resource_type="job",
-            resource_id=None,  # will be set after flush
+            resource_id=str(job.id),
             details={"job_type": job_type, "risk_level": risk_level.value},
             ip_address=ip_address,
         )
@@ -154,7 +155,7 @@ class ExecutionEngine:
         await db.refresh(job)
 
         if not requires_approval:
-            await self._enqueue_celery(job)
+            await self._enqueue_celery(db, job)
 
         return job
 
@@ -208,7 +209,7 @@ class ExecutionEngine:
 
         await db.commit()
         await db.refresh(job)
-        await self._enqueue_celery(job)
+        await self._enqueue_celery(db, job)
         return job
 
     async def reject_approval(
@@ -318,8 +319,8 @@ class ExecutionEngine:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _enqueue_celery(self, job: DevOpsJob) -> None:
-        """Push job to the appropriate Celery queue."""
+    async def _enqueue_celery(self, db: AsyncSession, job: DevOpsJob) -> None:
+        """Push job to the appropriate Celery queue and persist the Celery task ID."""
         try:
             from app.workers.execution_tasks import dispatch_devops_job
             queue = QUEUE_MAP.get(job.risk_level, "devops_low")
@@ -328,8 +329,9 @@ class ExecutionEngine:
                 queue=queue,
                 countdown=0,
             )
-            # Store task ID for cancellation
+            # Persist task ID so cancel_job can revoke it
             job.celery_task_id = result.id
+            await db.commit()
             logger.info("Job %s enqueued on queue=%s task=%s", job.id, queue, result.id)
         except Exception as exc:
             logger.exception("Failed to enqueue job %s: %s", job.id, exc)

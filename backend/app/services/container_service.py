@@ -160,7 +160,10 @@ def _parse_dt(value: str | int | None) -> datetime | None:
         if isinstance(value, (int, float)):
             return datetime.fromtimestamp(value, tz=timezone.utc)
         from dateutil import parser as dtp
-        return dtp.parse(str(value)).replace(tzinfo=timezone.utc)
+        parsed = dtp.parse(str(value))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
     except Exception:
         return None
 

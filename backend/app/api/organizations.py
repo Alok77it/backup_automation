@@ -298,8 +298,8 @@ async def remove_member(
     if not mem:
         raise HTTPException(status_code=404, detail="Member not found")
     # Prevent removing the org owner
-    from app.models.entities import UserRole
-    if mem.role == UserRole.OWNER:
+    from app.models.entities import Role
+    if mem.role == Role.OWNER:
         raise HTTPException(status_code=400, detail="Cannot remove the organization owner")
     await db.delete(mem)
     await log_audit(db, membership.organization_id, "user.removed", "user", resource_id=str(user_id))

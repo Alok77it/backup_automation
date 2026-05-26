@@ -17,7 +17,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from app.core.dependencies import DbSession, OrgMembership, require_permission
+from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
+from app.models.entities import OrganizationMember
 from app.models.devops_entities import RiskLevel, SSLStatus
 from app.services.execution_engine import execution_engine
 from app.services.ssl_service import ssl_service
@@ -111,19 +112,20 @@ async def list_certificates(
     "/ssl/certificates",
     response_model=SSLCertOut,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(verify_csrf)],
 )
 async def issue_certificate(
     body: SSLCertRequest,
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
     """
     Request a Let's Encrypt certificate for a domain.
-    Creates a cert record + submits a HIGH-risk SSL_issue job (→ approval required).
+    Creates a cert record + submits a HIGH-risk SSL_issue job (-> approval required).
     """
     cert = await ssl_service.create_certificate_record(
         db,
@@ -162,13 +164,13 @@ async def issue_certificate(
     return cert
 
 
-@router.post("/ssl/certificates/{cert_id}/renew", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/ssl/certificates/{cert_id}/renew", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_csrf)])
 async def renew_certificate(
     cert_id: uuid.UUID,
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
@@ -223,13 +225,14 @@ async def list_proxy_configs(
     "/proxy/configs",
     response_model=ProxyConfigOut,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_csrf)],
 )
 async def create_proxy_config(
     body: ProxyConfigRequest,
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
@@ -253,18 +256,18 @@ async def create_proxy_config(
     return proxy
 
 
-@router.post("/proxy/configs/{proxy_id}/deploy", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/proxy/configs/{proxy_id}/deploy", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_csrf)])
 async def deploy_proxy_config(
     proxy_id: uuid.UUID,
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("server:write"))
     ],
 ):
     """
-    Generate the Nginx config and deploy it via the agent (HIGH-risk → approval required).
+    Generate the Nginx config and deploy it via the agent (HIGH-risk -> approval required).
     """
     from sqlalchemy import select
     from app.models.devops_entities import ReverseProxyConfig, SSLCertificate
@@ -307,7 +310,7 @@ async def deploy_proxy_config(
 
 
 # ---------------------------------------------------------------------------
-# Nginx config preview (safe — no deployment)
+# Nginx config preview (safe -- no deployment)
 # ---------------------------------------------------------------------------
 
 @router.get("/proxy/configs/{proxy_id}/preview")

@@ -1,6 +1,9 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from app.models.entities import BackupRun, JobStatus
+
+_EPOCH = datetime.min.replace(tzinfo=timezone.utc)
 
 
 @dataclass
@@ -26,7 +29,7 @@ def calculate_backup_health(
     total = len(runs)
     success_rate = len(completed) / total if total else 0
 
-    recent_runs = sorted(runs, key=lambda r: r.started_at or r.completed_at, reverse=True)[:10]
+    recent_runs = sorted(runs, key=lambda r: r.started_at or r.completed_at or _EPOCH, reverse=True)[:10]
     recent_failures = sum(1 for r in recent_runs if r.status == JobStatus.FAILED)
     recent_failure_rate = recent_failures / len(recent_runs) if recent_runs else 0
 

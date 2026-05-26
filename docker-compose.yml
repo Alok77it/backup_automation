@@ -69,6 +69,8 @@ services:
       dockerfile: Dockerfile.worker
     container_name: bi-worker
     restart: unless-stopped
+    # celery_devops re-exports celery_app + registers execution_tasks and DevOps queues
+    command: celery -A app.workers.celery_devops worker --loglevel=info --concurrency=4 -Q celery,devops_low,devops_medium,devops_high
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-backupintel}:${POSTGRES_PASSWORD:-backupintel_secret}@postgres:5432/${POSTGRES_DB:-backup_intelligence}
@@ -89,7 +91,8 @@ services:
       dockerfile: Dockerfile.worker
     container_name: bi-beat
     restart: unless-stopped
-    command: celery -A app.workers.celery_app beat --loglevel=info
+    # celery_devops includes all beat schedules: backup, monitoring + DevOps periodic tasks
+    command: celery -A app.workers.celery_devops beat --loglevel=info
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-backupintel}:${POSTGRES_PASSWORD:-backupintel_secret}@postgres:5432/${POSTGRES_DB:-backup_intelligence}

@@ -39,6 +39,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Backup Intelligence API")
+    from app.app_extension import sync_plugin_catalog_on_startup
+    await sync_plugin_catalog_on_startup(app)
     yield
     await engine.dispose()
     logger.info("Shutdown complete")
@@ -81,10 +83,9 @@ app.include_router(storage.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(selfmonitor.router, prefix="/api")
 
-# ── DevOps Control Plane extension (additive only — no existing code modified) ──
+# DevOps Control Plane extension (additive only - no existing code modified)
 from app.app_extension import register_devops_extension  # noqa: E402
 register_devops_extension(app)
-# ────────────────────────────────────────────────────────────────────────────────
 
 
 @app.get("/api/health")
@@ -94,8 +95,7 @@ async def health_check():
 
 _LOCALHOST_IPS = {"127.0.0.1", "::1", "localhost"}
 
-# Docker internal networks — Prometheus runs in the same compose network
-# RFC1918 private ranges: 10.x.x.x, 172.16-31.x.x, 192.168.x.x
+
 def _is_private_ip(host: str) -> bool:
     import ipaddress
     try:
@@ -107,13 +107,7 @@ def _is_private_ip(host: str) -> bool:
 
 @app.get("/metrics")
 async def prometheus_metrics(request: Request):
-    """Prometheus scrape endpoint.
-
-    Access policy (in order):
-    1. If METRICS_TOKEN is configured, require Authorization: Bearer <token>
-    2. Otherwise allow only private/loopback IPs (localhost + Docker internal network).
-       This blocks external internet scrapers while allowing Prometheus container access.
-    """
+    """Prometheus scrape endpoint -- restricted to internal network or Bearer token."""
     from fastapi import HTTPException as _HTTPException
 
     metrics_token = settings.METRICS_TOKEN

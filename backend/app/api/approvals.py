@@ -1,7 +1,7 @@
 """
 Approval System API Router
 ============================
-PENDING → APPROVED → EXECUTING → COMPLETED | FAILED
+PENDING -> APPROVED -> EXECUTING -> COMPLETED | FAILED
 Only OWNER / ADMIN can approve or reject.
 All decisions are immutably audit-logged.
 """
@@ -15,16 +15,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
-from app.core.dependencies import DbSession, OrgMembership, require_permission
+from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
 from app.models.devops_entities import ApprovalRequest, ApprovalStatus, RiskLevel
+from app.models.entities import OrganizationMember
 from app.services.execution_engine import ExecutionError, execution_engine
 
 router = APIRouter(prefix="/approvals", tags=["Approval System"])
 
-
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
 
 class ApprovalOut(BaseModel):
     id: uuid.UUID
@@ -49,10 +46,6 @@ class ApprovalOut(BaseModel):
 class ApprovalDecision(BaseModel):
     note: str | None = None
 
-
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
 
 @router.get("", response_model=list[ApprovalOut])
 async def list_approvals(
@@ -80,11 +73,11 @@ async def list_approvals(
 async def get_pending_approvals(
     db: DbSession,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("org:manage"))
     ],
 ):
-    """Quick view of all pending approvals — requires admin+."""
+    """Quick view of all pending approvals -- requires admin+."""
     return await execution_engine.get_pending_approvals(
         db, organization_id=membership.organization_id
     )
@@ -109,31 +102,26 @@ async def get_approval(
     return approval
 
 
-@router.post("/{approval_id}/approve", response_model=ApprovalOut)
+@router.post("/{approval_id}/approve", response_model=ApprovalOut, dependencies=[Depends(verify_csrf)])
 async def approve_request(
     approval_id: uuid.UUID,
     body: ApprovalDecision,
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("org:manage"))
     ],
 ):
-    """
-    Approve a pending HIGH-risk job. The linked DevOpsJob transitions
-    to QUEUED and is immediately dispatched to Celery.
-    Requires Admin or Owner role.
-    """
+    """Approve a pending HIGH-risk job. Requires Admin or Owner role."""
     try:
-        job = await execution_engine.approve_and_enqueue(
+        await execution_engine.approve_and_enqueue(
             db,
             approval_id=approval_id,
             reviewed_by=membership.user_id,
             review_note=body.note,
             ip_address=request.client.host if request.client else None,
         )
-        # Return the approval record
         from sqlalchemy import select
         result = await db.execute(
             select(ApprovalRequest).where(ApprovalRequest.id == approval_id)
@@ -143,21 +131,18 @@ async def approve_request(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/{approval_id}/reject", response_model=ApprovalOut)
+@router.post("/{approval_id}/reject", response_model=ApprovalOut, dependencies=[Depends(verify_csrf)])
 async def reject_request(
     approval_id: uuid.UUID,
     body: ApprovalDecision,
     db: DbSession,
     request: Request,
     membership: Annotated[
-        OrgMembership.__class__,
+        OrganizationMember,
         Depends(require_permission("org:manage"))
     ],
 ):
-    """
-    Reject a pending request. The linked job is cancelled.
-    Requires Admin or Owner role.
-    """
+    """Reject a pending request. The linked job is cancelled. Requires Admin or Owner role."""
     try:
         approval = await execution_engine.reject_approval(
             db,

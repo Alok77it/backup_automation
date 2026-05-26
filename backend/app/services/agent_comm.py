@@ -31,7 +31,6 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.security import create_access_token  # reuse existing JWT helper (read-only)
 from app.models.devops_entities import AgentToken, DevOpsAuditLog
 
 logger = logging.getLogger(__name__)
@@ -106,7 +105,7 @@ class AgentCommService:
     """
 
     def __init__(self) -> None:
-        self._client_cache: dict[str, httpx.AsyncClient] = {}
+        pass
 
     # ------------------------------------------------------------------
     # Token management
