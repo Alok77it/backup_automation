@@ -59,6 +59,7 @@ interface StoredCredential {
   label: string;
   server_id: string | null;
   username: string | null;
+  metadata_json: Record<string, unknown> | null;
   display_name: string | null;
   secret_preview: string | null;
 }
