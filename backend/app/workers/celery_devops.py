@@ -24,6 +24,7 @@ from app.workers.celery_app import celery_app  # noqa: F401 — re-exported
 celery_app.conf.include = list(celery_app.conf.include) + [
     "app.workers.execution_tasks",
 ]
+from app.workers import execution_tasks  # noqa: F401,E402 - force task registration
 
 # Add new beat schedules (dict.update is non-destructive to existing entries)
 celery_app.conf.beat_schedule.update(

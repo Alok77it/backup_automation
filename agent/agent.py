@@ -318,6 +318,10 @@ async def _dispatch(command: str, args: dict, timeout: int) -> tuple[Any, int]:
 
 
 async def _run_subprocess(cmd: list[str], timeout: int) -> str:
+    env = os.environ.copy()
+    env.setdefault("DEBIAN_FRONTEND", "noninteractive")
+    env.setdefault("NEEDRESTART_MODE", "a")
+    env.setdefault("APT_LISTCHANGES_FRONTEND", "none")
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(
         None,
@@ -327,6 +331,7 @@ async def _run_subprocess(cmd: list[str], timeout: int) -> str:
             text=True,
             timeout=timeout,
             shell=False,  # NEVER use shell=True
+            env=env,
         )
     )
     combined = (result.stdout or "") + (result.stderr or "")
@@ -515,11 +520,20 @@ async def _package_install(args: dict, timeout: int) -> str:
     if not packages:
         return "No packages provided"
     if os.path.exists("/usr/bin/apt-get"):
-        return await _run_subprocess(["apt-get", "update"], timeout) + await _run_subprocess(["apt-get", "install", "-y", *packages], timeout)
+        return await _run_subprocess(["apt-get", "update", "-y"], timeout) + await _run_subprocess([
+            "apt-get",
+            "install",
+            "-y",
+            "-o",
+            "Dpkg::Options::=--force-confdef",
+            "-o",
+            "Dpkg::Options::=--force-confold",
+            *packages,
+        ], timeout)
     if os.path.exists("/usr/bin/yum"):
-        return await _run_subprocess(["yum", "install", "-y", *packages], timeout)
+        return await _run_subprocess(["yum", "install", "-y", "--assumeyes", *packages], timeout)
     if os.path.exists("/usr/bin/dnf"):
-        return await _run_subprocess(["dnf", "install", "-y", *packages], timeout)
+        return await _run_subprocess(["dnf", "install", "-y", "--assumeyes", *packages], timeout)
     return "No supported package manager found"
 
 
@@ -556,9 +570,13 @@ async def _run_approved_script(args: dict, timeout: int) -> str:
     script_content = args.get("script_content", "")
     if not script_content:
         return "No script_content provided"
+    prefix = """export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+export APT_LISTCHANGES_FRONTEND=none
+"""
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as f:
-        f.write(script_content)
+        f.write(prefix + "\n" + script_content)
         tmp_path = f.name
 
     try:

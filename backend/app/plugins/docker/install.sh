@@ -3,6 +3,9 @@
 # Executed by the server agent in a sandboxed environment.
 # Supports: Ubuntu, Debian, CentOS/RHEL, Amazon Linux
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+export APT_LISTCHANGES_FRONTEND=none
 
 log() { echo "[DOCKER-INSTALL] $*"; }
 
@@ -24,8 +27,8 @@ else
   case "$OS_ID" in
     ubuntu|debian)
       log "Installing Docker via apt..."
-      apt-get update -qq
-      apt-get install -y -qq ca-certificates curl gnupg lsb-release
+      apt-get update -y -qq
+      apt-get install -y -qq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold ca-certificates curl gnupg lsb-release
       install -m 0755 -d /etc/apt/keyrings
       curl -fsSL https://download.docker.com/linux/${OS_ID}/gpg \
         | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -34,8 +37,8 @@ else
         "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
         https://download.docker.com/linux/${OS_ID} $(lsb_release -cs) stable" \
         > /etc/apt/sources.list.d/docker.list
-      apt-get update -qq
-      apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      apt-get update -y -qq
+      apt-get install -y -qq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       ;;
     centos|rhel|fedora)
       log "Installing Docker via yum/dnf..."
@@ -50,7 +53,7 @@ else
       ;;
     *)
       log "Unsupported OS: $OS_ID. Attempting generic curl install..."
-      curl -fsSL https://get.docker.com | sh
+      curl -fsSL https://get.docker.com | sh -s -- -y
       ;;
   esac
 fi

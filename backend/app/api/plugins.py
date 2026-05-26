@@ -253,7 +253,7 @@ async def install_plugin(
             plugin_id=plugin_id,
             payload=payload,
             risk_level=RiskLevel.MEDIUM,
-            timeout_seconds=600,
+            timeout_seconds=1800,
             ip_address=request.client.host if request.client else None,
         )
 

@@ -104,6 +104,10 @@ async def list_jobs(
     limit: int = 50,
     offset: int = 0,
 ):
+    await execution_engine.recover_stuck_jobs(
+        db,
+        organization_id=membership.organization_id,
+    )
     stmt = select(DevOpsJob).where(DevOpsJob.organization_id == membership.organization_id)
     if server_id:
         stmt = stmt.where(DevOpsJob.server_id == server_id)

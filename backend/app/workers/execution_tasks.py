@@ -102,6 +102,7 @@ async def _dispatch_job_async(task: Task, job_id: str) -> dict:
             job.status = JobStatus.FAILED
             job.error_message = str(exc)[:2000]
             result_data = {"error": str(exc)}
+            await _mark_plugin_install_failed(db, job, str(exc)[:2000])
         finally:
             job.completed_at = datetime.now(timezone.utc)
             if job.started_at:
@@ -111,6 +112,24 @@ async def _dispatch_job_async(task: Task, job_id: str) -> dict:
             await db.commit()
 
         return result_data
+
+
+async def _mark_plugin_install_failed(db, job, error_message: str) -> None:
+    if job.job_type != "plugin_install":
+        return
+    installation_id = (job.payload or {}).get("installation_id")
+    if not installation_id:
+        return
+    try:
+        from app.models.devops_entities import PluginInstallation, PluginStatus
+
+        install = await db.get(PluginInstallation, uuid.UUID(str(installation_id)))
+        if install and install.status == PluginStatus.INSTALLING:
+            install.status = PluginStatus.FAILED
+            install.error_message = error_message
+            install.health_status = None
+    except Exception:
+        logger.exception("Failed to mark plugin installation failed for job %s", job.id)
 
 
 async def _route_job(db, job) -> dict:
@@ -201,6 +220,10 @@ async def _handle_agent_command(db, job) -> dict:
             stream="stdout" if response.success else "stderr",
         )
         db.add(log)
+
+    if not response.success:
+        output = response.error or response.output or "Agent command failed"
+        raise RuntimeError(str(output)[:2000])
 
     return {
         "success": response.success,

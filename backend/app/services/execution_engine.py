@@ -18,7 +18,7 @@ import hashlib
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import redis.asyncio as aioredis
@@ -352,6 +352,56 @@ class ExecutionEngine:
         await db.delete(job)
         await db.commit()
 
+    async def recover_stuck_jobs(
+        self,
+        db: AsyncSession,
+        *,
+        organization_id: uuid.UUID,
+        older_than_seconds: int = 60,
+        limit: int = 20,
+    ) -> int:
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(seconds=older_than_seconds)
+        result = await db.execute(
+            select(DevOpsJob)
+            .where(
+                DevOpsJob.organization_id == organization_id,
+                DevOpsJob.status == JobStatus.QUEUED,
+                DevOpsJob.requires_approval == False,
+                DevOpsJob.created_at <= cutoff,
+            )
+            .order_by(DevOpsJob.created_at.asc())
+            .limit(limit)
+        )
+        jobs = list(result.scalars().all())
+        for job in jobs:
+            job.celery_task_id = None
+            job.queued_at = now
+            await self._enqueue_celery(db, job)
+
+        timeout_result = await db.execute(
+            select(DevOpsJob)
+            .where(
+                DevOpsJob.organization_id == organization_id,
+                DevOpsJob.status == JobStatus.EXECUTING,
+                DevOpsJob.started_at.is_not(None),
+            )
+            .limit(limit)
+        )
+        timed_out = 0
+        for job in timeout_result.scalars().all():
+            deadline = job.started_at + timedelta(seconds=(job.timeout_seconds or 300) + 60)
+            if deadline > now:
+                continue
+            job.status = JobStatus.TIMEOUT
+            job.completed_at = now
+            job.error_message = "Job timed out without completing. Check worker/agent connectivity and retry."
+            await self._mark_linked_plugin_install_failed(db, job, error_message=job.error_message)
+            timed_out += 1
+        if timed_out:
+            await db.commit()
+        return len(jobs) + timed_out
+
     @staticmethod
     async def _mark_linked_plugin_install_failed(
         db: AsyncSession,
@@ -404,7 +454,7 @@ class ExecutionEngine:
         """Push job to the appropriate Celery queue and persist the Celery task ID."""
         try:
             from app.workers.execution_tasks import dispatch_devops_job
-            queue = QUEUE_MAP.get(job.risk_level, "devops_low")
+            queue = "devops_low"
             result = dispatch_devops_job.apply_async(
                 kwargs={"job_id": str(job.id)},
                 queue=queue,
@@ -416,6 +466,11 @@ class ExecutionEngine:
             logger.info("Job %s enqueued on queue=%s task=%s", job.id, queue, result.id)
         except Exception as exc:
             logger.exception("Failed to enqueue job %s: %s", job.id, exc)
+            job.status = JobStatus.FAILED
+            job.error_message = f"Failed to enqueue job: {exc}"
+            job.completed_at = datetime.now(timezone.utc)
+            await self._mark_linked_plugin_install_failed(db, job, error_message=job.error_message)
+            await db.commit()
 
     @staticmethod
     async def _write_audit(
