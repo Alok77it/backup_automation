@@ -36,14 +36,30 @@ logger = logging.getLogger(__name__)
 def _sync_run(coro):
     """Run an async coroutine from a sync Celery task."""
     import asyncio
+
+    async def _runner():
+        try:
+            return await coro
+        finally:
+            # Celery prefork workers run many sync tasks in the same process.
+            # asyncpg connections are bound to the event loop that created them,
+            # so dispose the async pool before this per-task loop is closed.
+            from app.core.database import engine
+
+            await engine.dispose()
+
+    loop = asyncio.new_event_loop()
+    previous_loop = None
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            raise RuntimeError
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
+        try:
+            previous_loop = asyncio.get_event_loop()
+        except RuntimeError:
+            previous_loop = None
         asyncio.set_event_loop(loop)
-    return loop.run_until_complete(coro)
+        return loop.run_until_complete(_runner())
+    finally:
+        loop.close()
+        asyncio.set_event_loop(previous_loop)
 
 
 async def _get_db():
@@ -158,7 +174,7 @@ async def _handle_agent_command(db, job) -> dict:
     from app.models.entities import Server
     from app.models.devops_entities import AgentToken, StoredCredential
     from app.core.security import decrypt_secret
-    from app.services.agent_comm import agent_comm
+    from app.services.agent_comm import AgentCommunicationError, agent_comm
 
     payload = job.payload or {}
     command = payload.get("command") or job.command
@@ -198,15 +214,24 @@ async def _handle_agent_command(db, job) -> dict:
     if not raw_token:
         raise ValueError("Agent token missing from job payload")
 
-    response = await agent_comm.execute(
-        server_hostname=server.hostname,
-        server_port=payload.get("agent_port", 9977),
-        agent_token_raw=raw_token,
-        command=command,
-        args=args,
-        job_id=str(job.id),
-        timeout_seconds=job.timeout_seconds,
-    )
+    try:
+        response = await agent_comm.execute(
+            server_hostname=server.hostname,
+            server_port=payload.get("agent_port", 9977),
+            agent_token_raw=raw_token,
+            command=command,
+            args=args,
+            job_id=str(job.id),
+            timeout_seconds=job.timeout_seconds,
+        )
+    except AgentCommunicationError as exc:
+        response = await _execute_ssh_fallback(
+            server=server,
+            command=command,
+            args=args,
+            timeout_seconds=job.timeout_seconds,
+            reason=str(exc),
+        )
 
     # Persist log lines
     from app.models.devops_entities import JobLog
@@ -231,6 +256,99 @@ async def _handle_agent_command(db, job) -> dict:
         "output": str(response.output)[:5000] if response.output else None,
         "duration_ms": response.duration_ms,
     }
+
+
+async def _execute_ssh_fallback(*, server, command: str, args: dict, timeout_seconds: int, reason: str):
+    from app.core.security import decrypt_secret
+    from app.services.agent_comm import AgentResponse
+    from app.services.ssh_service import run_ssh_command_sync
+
+    shell = _ssh_fallback_command(command, args)
+    if not shell:
+        raise RuntimeError(f"Cannot reach agent and SSH fallback is not supported for command '{command}': {reason}")
+
+    password = decrypt_secret(server.encrypted_password) if server.encrypted_password else None
+    private_key = decrypt_secret(server.encrypted_private_key) if server.encrypted_private_key else None
+    if not password and not private_key:
+        raise RuntimeError(f"Cannot reach agent and server has no SSH credential for fallback: {reason}")
+
+    import asyncio
+
+    exit_code, stdout, stderr = await asyncio.to_thread(
+        run_ssh_command_sync,
+        server.hostname,
+        server.port,
+        server.username,
+        shell,
+        password,
+        private_key,
+        server.auth_method,
+        timeout_seconds,
+    )
+    output = (
+        "[SSH fallback used because the HTTP agent was unreachable]\n"
+        f"Agent error: {reason}\n\n"
+        f"{stdout or ''}{stderr or ''}"
+    )
+    return AgentResponse(
+        success=exit_code == 0,
+        output=output,
+        exit_code=exit_code,
+        duration_ms=0,
+        error=None if exit_code == 0 else output,
+    )
+
+
+def _shell_quote(value: object) -> str:
+    import shlex
+
+    return shlex.quote(str(value))
+
+
+def _ssh_fallback_command(command: str, args: dict) -> str | None:
+    if command == "script_run_approved":
+        script = str(args.get("script_content") or "")
+        if not script:
+            return None
+        import base64
+
+        encoded = base64.b64encode(script.encode()).decode()
+        return (
+            "set -e; export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none; "
+            "tmp=$(mktemp /tmp/bi-script.XXXXXX.sh); "
+            f"printf %s {_shell_quote(encoded)} | base64 -d > \"$tmp\"; "
+            "chmod 700 \"$tmp\"; /bin/bash \"$tmp\"; rc=$?; rm -f \"$tmp\"; exit $rc"
+        )
+    if command == "package_install":
+        packages = [_shell_quote(p) for p in (args.get("packages") or []) if str(p).strip()]
+        if not packages:
+            return None
+        joined = " ".join(packages)
+        return (
+            "set -e; export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none; "
+            "if command -v apt-get >/dev/null 2>&1; then "
+            f"apt-get update -y && apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold {joined}; "
+            "elif command -v dnf >/dev/null 2>&1; then "
+            f"dnf install -y --assumeyes {joined}; "
+            "elif command -v yum >/dev/null 2>&1; then "
+            f"yum install -y --assumeyes {joined}; "
+            "else echo 'No supported package manager found' >&2; exit 1; fi"
+        )
+    if command in {"plugin_install", "docker_compose_up"}:
+        compose = str(args.get("compose_content") or "")
+        install_path = str(args.get("install_path") or "/opt/devops-plugin")
+        if not compose:
+            return None
+        import base64
+
+        encoded = base64.b64encode(compose.encode()).decode()
+        return (
+            "set -e; export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none; "
+            f"mkdir -p {_shell_quote(install_path)}; "
+            f"printf %s {_shell_quote(encoded)} | base64 -d > {_shell_quote(install_path)}/docker-compose.yml; "
+            f"docker compose -f {_shell_quote(install_path)}/docker-compose.yml up -d --pull always"
+        )
+    return None
 
 
 async def _handle_plugin_install(db, job) -> dict:
