@@ -8,6 +8,7 @@ server agent. Runtime changes are queued as DevOps jobs.
 from __future__ import annotations
 
 import uuid
+import json
 from datetime import datetime
 from typing import Annotated
 
@@ -22,6 +23,7 @@ from app.models.entities import OrganizationMember, Server
 from app.services.agent_comm import agent_comm
 from app.services.container_service import container_service
 from app.services.execution_engine import execution_engine
+from app.services.ssh_service import run_ssh_command_sync
 
 router = APIRouter(prefix="/containers", tags=["Container Management"])
 
@@ -136,6 +138,52 @@ async def _resolve_agent_token(db: DbSession, membership: OrganizationMember, bo
     raise HTTPException(status_code=400, detail="agent_token_raw or agent_credential_id is required")
 
 
+async def _refresh_snapshots_via_ssh(db: DbSession, membership: OrganizationMember, server_id: uuid.UUID) -> None:
+    server = await db.get(Server, server_id)
+    if not server or server.organization_id != membership.organization_id:
+        return
+    password = decrypt_secret(server.encrypted_password) if server.encrypted_password else None
+    private_key = decrypt_secret(server.encrypted_private_key) if server.encrypted_private_key else None
+    if not password and not private_key:
+        return
+
+    import asyncio
+
+    command = "docker ps -a --format '{{json .}}'"
+    try:
+        exit_code, stdout, _stderr = await asyncio.to_thread(
+            run_ssh_command_sync,
+            server.hostname,
+            server.port,
+            server.username,
+            command,
+            password,
+            private_key,
+            server.auth_method,
+            60,
+        )
+    except Exception:
+        return
+    if exit_code != 0:
+        return
+
+    containers = []
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            containers.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    await container_service.refresh_snapshots(
+        db,
+        organization_id=membership.organization_id,
+        server_id=server_id,
+        raw_containers=containers,
+    )
+
+
 @router.get("", response_model=list[ContainerSnapshotOut])
 async def list_containers(
     db: DbSession,
@@ -146,6 +194,8 @@ async def list_containers(
     offset: int = 0,
 ):
     """List cached container snapshots."""
+    if server_id:
+        await _refresh_snapshots_via_ssh(db, membership, server_id)
     return await container_service.get_snapshots(
         db,
         organization_id=membership.organization_id,
@@ -163,6 +213,8 @@ async def container_summary(
     server_id: uuid.UUID | None = None,
 ):
     """Dashboard summary: container counts by state."""
+    if server_id:
+        await _refresh_snapshots_via_ssh(db, membership, server_id)
     summary = await container_service.get_summary(
         db,
         organization_id=membership.organization_id,

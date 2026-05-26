@@ -62,6 +62,34 @@ fi
 systemctl enable docker --now
 log "Docker service started"
 
+if ! docker compose version >/dev/null 2>&1; then
+  log "Docker Compose plugin missing. Installing Compose support..."
+  case "$OS_ID" in
+    ubuntu|debian)
+      apt-get update -y -qq
+      apt-get install -y -qq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold docker-compose-plugin \
+        || apt-get install -y -qq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold docker-compose-v2
+      ;;
+    centos|rhel|fedora|amzn)
+      yum install -y -q docker-compose-plugin || dnf install -y -q docker-compose-plugin
+      ;;
+  esac
+fi
+
+if ! docker compose version >/dev/null 2>&1; then
+  log "Installing Docker Compose CLI plugin from GitHub..."
+  ARCH="$(uname -m)"
+  case "$ARCH" in
+    x86_64) ARCH="x86_64" ;;
+    aarch64|arm64) ARCH="aarch64" ;;
+  esac
+  mkdir -p /usr/local/lib/docker/cli-plugins /usr/libexec/docker/cli-plugins
+  curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${ARCH}" \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose
+  chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+  ln -sf /usr/local/lib/docker/cli-plugins/docker-compose /usr/libexec/docker/cli-plugins/docker-compose
+fi
+
 # ── Verify ────────────────────────────────────────────────────────
 docker --version
 docker compose version
