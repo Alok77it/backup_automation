@@ -89,7 +89,7 @@ export default function ContainersPage() {
       : null;
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="Container Management">
       <div className="space-y-6 p-6">
         <div>
           <h1 className="text-3xl font-bold">Container Management</h1>

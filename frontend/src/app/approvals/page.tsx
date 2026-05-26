@@ -82,7 +82,7 @@ export default function ApprovalsPage() {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="Approval Queue">
       <div className="space-y-6 p-6">
         <div>
           <h1 className="text-3xl font-bold">Approval Queue</h1>

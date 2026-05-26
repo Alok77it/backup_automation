@@ -83,7 +83,7 @@ export default function ControlPlanePage() {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="Control Plane">
       <div className="space-y-6 p-6">
         {/* Header */}
         <div>

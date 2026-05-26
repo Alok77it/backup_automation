@@ -92,7 +92,7 @@ export default function ExecutionPage() {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="Execution Engine">
       <div className="flex h-full gap-4 p-6">
         {/* Job List */}
         <div className="flex-1 space-y-4">
