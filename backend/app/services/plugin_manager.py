@@ -170,31 +170,54 @@ class PluginManager:
         if not plugin:
             raise PluginNotFoundError(f"Plugin '{plugin_id}' not found in catalog")
 
-        # Check for existing active installation
+        # Check for an existing row. The DB enforces one row per server/plugin,
+        # so failed/uninstalled/stale installing rows are reused for retries.
         existing = await db.execute(
             select(PluginInstallation).where(
+                PluginInstallation.organization_id == organization_id,
                 PluginInstallation.server_id == server_id,
                 PluginInstallation.plugin_id == plugin_id,
-                PluginInstallation.status.in_([
-                    PluginStatus.INSTALLED,
-                    PluginStatus.INSTALLING,
-                ]),
             )
         )
-        if existing.scalar_one_or_none():
-            raise PluginAlreadyInstalledError(
-                f"Plugin '{plugin_id}' is already installed or being installed on this server"
-            )
+        existing_install = existing.scalar_one_or_none()
+        if existing_install:
+            if existing_install.status == PluginStatus.INSTALLED:
+                raise PluginAlreadyInstalledError(
+                    f"Plugin '{plugin_id}' is already installed on this server"
+                )
+            if existing_install.status == PluginStatus.INSTALLING and existing_install.install_job_id:
+                job = await db.get(DevOpsJob, existing_install.install_job_id)
+                if job and job.status not in (
+                    JobStatus.FAILED,
+                    JobStatus.CANCELLED,
+                    JobStatus.TIMEOUT,
+                    JobStatus.COMPLETED,
+                ):
+                    raise PluginAlreadyInstalledError(
+                        f"Plugin '{plugin_id}' is already being installed on this server"
+                    )
 
-        install = PluginInstallation(
-            organization_id=organization_id,
-            server_id=server_id,
-            plugin_id=plugin_id,
-            installed_by=installed_by,
-            status=PluginStatus.INSTALLING,
-            config=config or {},
-        )
-        db.add(install)
+            existing_install.status = PluginStatus.INSTALLING
+            existing_install.config = config or {}
+            existing_install.error_message = None
+            existing_install.health_status = None
+            existing_install.access_url = None
+            existing_install.install_job_id = None
+            existing_install.uninstalled_at = None
+            db.add(existing_install)
+            install = existing_install
+        else:
+            install = PluginInstallation(
+                organization_id=organization_id,
+                server_id=server_id,
+                plugin_id=plugin_id,
+                installed_by=installed_by,
+                status=PluginStatus.INSTALLING,
+                config=config or {},
+            )
+            db.add(install)
+
+        install.installed_by = installed_by
 
         audit = DevOpsAuditLog(
             organization_id=organization_id,

@@ -283,6 +283,11 @@ class ExecutionEngine:
         job.status = JobStatus.CANCELLED
         job.completed_at = datetime.now(timezone.utc)
         job.error_message = f"Cancelled by user {cancelled_by}"
+        await self._mark_linked_plugin_install_failed(
+            db,
+            job,
+            error_message=f"Install job cancelled by user {cancelled_by}",
+        )
 
         # Best-effort Celery revoke
         if job.celery_task_id:
@@ -327,6 +332,12 @@ class ExecutionEngine:
             except Exception:
                 pass
 
+        await self._mark_linked_plugin_install_failed(
+            db,
+            job,
+            error_message=f"Install job deleted by user {deleted_by}",
+        )
+
         await self._write_audit(
             db,
             organization_id=organization_id,
@@ -340,6 +351,31 @@ class ExecutionEngine:
         )
         await db.delete(job)
         await db.commit()
+
+    @staticmethod
+    async def _mark_linked_plugin_install_failed(
+        db: AsyncSession,
+        job: DevOpsJob,
+        *,
+        error_message: str,
+    ) -> None:
+        if job.job_type != "plugin_install":
+            return
+        installation_id = (job.payload or {}).get("installation_id")
+        if not installation_id:
+            return
+        try:
+            from app.models.devops_entities import PluginInstallation, PluginStatus
+
+            install = await db.get(PluginInstallation, uuid.UUID(str(installation_id)))
+            if not install:
+                return
+            if install.status == PluginStatus.INSTALLING:
+                install.status = PluginStatus.FAILED
+                install.error_message = error_message
+                install.health_status = None
+        except Exception:
+            logger.exception("Failed to update plugin installation for job %s", job.id)
 
     async def get_pending_approvals(
         self,
