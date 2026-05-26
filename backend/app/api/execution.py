@@ -107,6 +107,8 @@ async def list_jobs(
     stmt = select(DevOpsJob).where(DevOpsJob.organization_id == membership.organization_id)
     if server_id:
         stmt = stmt.where(DevOpsJob.server_id == server_id)
+    else:
+        stmt = stmt.where(DevOpsJob.server_id.is_not(None))
     if status_filter:
         try:
             stmt = stmt.where(DevOpsJob.status == JobStatus(status_filter))
@@ -178,6 +180,28 @@ async def cancel_job(
             organization_id=membership.organization_id,
         )
         return job
+    except ExecutionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(verify_csrf)])
+async def delete_job(
+    job_id: uuid.UUID,
+    db: DbSession,
+    request: Request,
+    membership: Annotated[
+        OrganizationMember,
+        Depends(require_permission("server:write"))
+    ],
+):
+    try:
+        await execution_engine.delete_job(
+            db,
+            job_id=job_id,
+            deleted_by=membership.user_id,
+            organization_id=membership.organization_id,
+            ip_address=request.client.host if request.client else None,
+        )
     except ExecutionError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

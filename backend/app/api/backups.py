@@ -66,6 +66,8 @@ async def list_database_backup_jobs(
         .where(
             Backup.organization_id == membership.organization_id,
             Backup.backup_type == BackupType.DATABASE,
+            Backup.is_active == True,
+            Backup.server_id.is_not(None),
         )
         .order_by(BackupRun.started_at.desc())
         .limit(limit)
@@ -99,7 +101,11 @@ async def list_all_runs(
     q = (
         select(BackupRun)
         .join(Backup, BackupRun.backup_id == Backup.id)
-        .where(Backup.organization_id == membership.organization_id)
+        .where(
+            Backup.organization_id == membership.organization_id,
+            Backup.is_active == True,
+            Backup.server_id.is_not(None),
+        )
         .order_by(BackupRun.started_at.desc())
     )
     if server_id:
@@ -195,7 +201,13 @@ async def list_backups(
     membership: Annotated[OrganizationMember, Depends(require_permission("backup:read"))],
 ):
     result = await db.execute(
-        select(Backup).where(Backup.organization_id == membership.organization_id).order_by(Backup.created_at.desc())
+        select(Backup)
+        .where(
+            Backup.organization_id == membership.organization_id,
+            Backup.is_active == True,
+            Backup.server_id.is_not(None),
+        )
+        .order_by(Backup.created_at.desc())
     )
     backups = result.scalars().all()
     return [await _backup_response(db, b) for b in backups]

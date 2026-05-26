@@ -21,12 +21,22 @@ async def get_dashboard_stats(
 
     servers = await db.scalar(select(func.count(Server.id)).where(Server.organization_id == org_id)) or 0
     active_backups = await db.scalar(
-        select(func.count(Backup.id)).where(Backup.organization_id == org_id, Backup.is_active == True)
+        select(func.count(Backup.id)).where(
+            Backup.organization_id == org_id,
+            Backup.is_active == True,
+            Backup.server_id.is_not(None),
+        )
     ) or 0
     failed_jobs = await db.scalar(
         select(func.count(BackupRun.id))
         .join(Backup)
-        .where(Backup.organization_id == org_id, BackupRun.status == JobStatus.FAILED, BackupRun.started_at >= since)
+        .where(
+            Backup.organization_id == org_id,
+            Backup.is_active == True,
+            Backup.server_id.is_not(None),
+            BackupRun.status == JobStatus.FAILED,
+            BackupRun.started_at >= since,
+        )
     ) or 0
 
     latest_storage = await db.execute(
@@ -40,7 +50,11 @@ async def get_dashboard_stats(
     quota = int(membership.organization.storage_quota_gb * 1024**3)
 
     restore_avg = await db.scalar(
-        select(func.avg(Backup.restore_confidence)).where(Backup.organization_id == org_id)
+        select(func.avg(Backup.restore_confidence)).where(
+            Backup.organization_id == org_id,
+            Backup.is_active == True,
+            Backup.server_id.is_not(None),
+        )
     ) or 0
 
     ai_alerts = await db.scalar(
@@ -51,7 +65,13 @@ async def get_dashboard_stats(
         )
     ) or 0
 
-    health_avg = await db.scalar(select(func.avg(Backup.health_score)).where(Backup.organization_id == org_id)) or 0
+    health_avg = await db.scalar(
+        select(func.avg(Backup.health_score)).where(
+            Backup.organization_id == org_id,
+            Backup.is_active == True,
+            Backup.server_id.is_not(None),
+        )
+    ) or 0
 
     return DashboardStats(
         total_servers=servers,
@@ -77,7 +97,12 @@ async def get_backup_trends(db: DbSession, membership: OrgMembership, days: int 
             func.count(BackupRun.id).filter(BackupRun.status == JobStatus.FAILED).label("failed"),
         )
         .join(Backup)
-        .where(Backup.organization_id == org_id, BackupRun.started_at >= since)
+        .where(
+            Backup.organization_id == org_id,
+            Backup.is_active == True,
+            Backup.server_id.is_not(None),
+            BackupRun.started_at >= since,
+        )
         .group_by("day")
         .order_by("day")
     )

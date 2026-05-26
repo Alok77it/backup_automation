@@ -2,13 +2,14 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import DbSession, require_permission, verify_csrf
 from app.models.entities import OrganizationMember
 from app.core.security import encrypt_secret
-from app.models.entities import MetricSnapshot, Server, ServerStatus
+from app.models.entities import Backup, MetricSnapshot, Server, ServerStatus
+from app.models.devops_entities import DevOpsJob
 from app.schemas.resources import ServerConnectionTest, ServerCreate, ServerResponse, ServerUpdate
 from app.services.audit import log_audit
 from app.services.logging_service import create_log
@@ -146,5 +147,27 @@ async def delete_server(
     server = result.scalar_one_or_none()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
+    await db.execute(
+        update(Backup)
+        .where(
+            Backup.organization_id == membership.organization_id,
+            (Backup.server_id == server_id) | (Backup.destination_server_id == server_id),
+        )
+        .values(is_active=False)
+    )
+    job_result = await db.execute(
+        select(DevOpsJob).where(
+            DevOpsJob.organization_id == membership.organization_id,
+            DevOpsJob.server_id == server_id,
+        )
+    )
+    for job in job_result.scalars().all():
+        if job.celery_task_id:
+            try:
+                from app.workers.celery_app import celery_app
+                celery_app.control.revoke(job.celery_task_id, terminate=True)
+            except Exception:
+                pass
+        await db.delete(job)
     await db.delete(server)
     return {"message": "Server deleted"}

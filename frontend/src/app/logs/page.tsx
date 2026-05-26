@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import {
   Search, Sparkles, RefreshCw, ScrollText, ChevronDown, ChevronRight,
   CheckCircle, XCircle, Clock, Loader2, AlertCircle, Play, Terminal,
+  Square, Trash2,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -128,7 +129,15 @@ function SysLogRow({ log }: { log: LogEntry }) {
 
 // ── Job row (expandable, fetches logs on open) ────────────────────────────────
 
-function JobRow({ job }: { job: Job }) {
+function JobRow({
+  job,
+  onCancel,
+  onDelete,
+}: {
+  job: Job;
+  onCancel: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [logs, setLogs] = useState<JobLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
@@ -154,6 +163,7 @@ function JobRow({ job }: { job: Job }) {
 
   const typeLabel = JOB_TYPE_LABEL[job.job_type] || job.job_type;
   const isFailed = job.status === "failed" || job.status === "timeout";
+  const canCancel = ["pending", "queued", "executing"].includes(job.status);
 
   return (
     <div
@@ -191,6 +201,16 @@ function JobRow({ job }: { job: Job }) {
           {isFailed && job.error_message && (
             <p className="mt-1 text-xs text-red-600 truncate">❌ {job.error_message}</p>
           )}
+        </div>
+        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+          {canCancel && (
+            <Button variant="ghost" size="icon" title="Stop job" onClick={() => onCancel(job.id)}>
+              <Square className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" title="Delete job" className="text-red-500 hover:text-red-700" onClick={() => onDelete(job.id)}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </div>
 
@@ -366,6 +386,28 @@ export default function LogsPage() {
     }
   }
 
+  async function cancelJob(id: string) {
+    if (!confirm("Stop this job?")) return;
+    setJobError("");
+    try {
+      await api(`/execution/jobs/${id}/cancel`, { method: "POST" });
+      loadJobs();
+    } catch (err) {
+      setJobError(err instanceof ApiError ? err.message : "Failed to stop job");
+    }
+  }
+
+  async function deleteJob(id: string) {
+    if (!confirm("Delete this job and its logs?")) return;
+    setJobError("");
+    try {
+      await api(`/execution/jobs/${id}`, { method: "DELETE" });
+      setJobs((prev) => prev.filter((j) => j.id !== id));
+    } catch (err) {
+      setJobError(err instanceof ApiError ? err.message : "Failed to delete job");
+    }
+  }
+
   const filteredJobs = jobFilter === "all"
     ? jobs
     : jobs.filter((j) => j.status === jobFilter);
@@ -473,7 +515,9 @@ export default function LogsPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {filteredJobs.map((j) => <JobRow key={j.id} job={j} />)}
+                {filteredJobs.map((j) => (
+                  <JobRow key={j.id} job={j} onCancel={cancelJob} onDelete={deleteJob} />
+                ))}
               </div>
             )}
           </div>

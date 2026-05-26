@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import {
   Play, Square, RefreshCw, Clock, CheckCircle, XCircle,
   AlertCircle, Loader2, Wand2, Server, KeyRound, Terminal,
+  Trash2,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -157,6 +158,16 @@ export default function ExecutionPage() {
     if (!confirm("Cancel this job?")) return;
     await api(`/execution/jobs/${id}/cancel`, { method: "POST" });
     loadJobs();
+  }
+
+  async function deleteJob(id: string) {
+    if (!confirm("Delete this job and its logs?")) return;
+    await api(`/execution/jobs/${id}`, { method: "DELETE" });
+    setJobs((prev) => prev.filter((j) => j.id !== id));
+    if (selectedJob?.id === id) {
+      setSelectedJob(null);
+      setLogs([]);
+    }
   }
 
   const duration = (ms: number | null) =>
@@ -349,6 +360,15 @@ export default function ExecutionPage() {
                           <Square className="h-3 w-3" />
                         </Button>
                       )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="text-red-500 hover:text-red-700"
+                        onClick={(e) => { e.stopPropagation(); deleteJob(job.id); }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </button>
                   ))}
                 </div>

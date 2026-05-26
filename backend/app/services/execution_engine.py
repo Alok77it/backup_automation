@@ -277,7 +277,7 @@ class ExecutionEngine:
         job = result.scalar_one_or_none()
         if not job:
             raise ExecutionError("Job not found")
-        if job.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+        if job.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.TIMEOUT):
             raise ExecutionError(f"Job already in terminal state: {job.status.value}")
 
         job.status = JobStatus.CANCELLED
@@ -295,6 +295,51 @@ class ExecutionEngine:
         await db.commit()
         await db.refresh(job)
         return job
+
+    async def delete_job(
+        self,
+        db: AsyncSession,
+        *,
+        job_id: uuid.UUID,
+        deleted_by: uuid.UUID,
+        organization_id: uuid.UUID,
+        ip_address: str | None = None,
+    ) -> None:
+        result = await db.execute(
+            select(DevOpsJob).where(
+                DevOpsJob.id == job_id,
+                DevOpsJob.organization_id == organization_id,
+            )
+        )
+        job = result.scalar_one_or_none()
+        if not job:
+            raise ExecutionError("Job not found")
+
+        if job.celery_task_id and job.status not in (
+            JobStatus.COMPLETED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+            JobStatus.TIMEOUT,
+        ):
+            try:
+                from app.workers.celery_app import celery_app
+                celery_app.control.revoke(job.celery_task_id, terminate=True)
+            except Exception:
+                pass
+
+        await self._write_audit(
+            db,
+            organization_id=organization_id,
+            user_id=deleted_by,
+            server_id=job.server_id,
+            action="job.deleted",
+            resource_type="job",
+            resource_id=str(job.id),
+            details={"job_type": job.job_type, "status": job.status.value},
+            ip_address=ip_address,
+        )
+        await db.delete(job)
+        await db.commit()
 
     async def get_pending_approvals(
         self,
