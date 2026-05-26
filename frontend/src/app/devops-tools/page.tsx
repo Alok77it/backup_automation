@@ -224,7 +224,9 @@ export default function DevOpsToolsPage() {
                                 <Download className="h-4 w-4 mr-2" />
                               )}
                               Install
-                              <Lock className="h-3 w-3 ml-1 opacity-50" title="Requires approval" />
+                              <span title="Requires approval">
+                                <Lock className="h-3 w-3 ml-1 opacity-50" />
+                              </span>
                             </Button>
                           )}
                           {plugin.docs_url && (
