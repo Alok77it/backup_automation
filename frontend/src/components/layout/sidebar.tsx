@@ -19,9 +19,7 @@ import {
   Archive,
   LogOut,
   Container,
-  Sliders,
   Wrench,
-  CheckSquare,
   Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,10 +33,8 @@ const navItems = [
   { href: "/restore", label: "Restore Center", icon: RotateCcw },
   { href: "/monitoring", label: "Monitoring", icon: Activity },
   { href: "/ai", label: "AI Intelligence", icon: Brain },
-  { href: "/control-plane", label: "Control Plane", icon: Sliders },
   { href: "/devops-tools", label: "DevOps Tools", icon: Wrench },
-  { href: "/approvals", label: "Approvals", icon: CheckSquare },
-  { href: "/execution", label: "Execution Engine", icon: Play },
+  { href: "/execution", label: "Automation Script", icon: Play },
   { href: "/logs", label: "Logs", icon: ScrollText },
   { href: "/policies", label: "Policies", icon: Shield },
   { href: "/storage", label: "Storage", icon: Database },

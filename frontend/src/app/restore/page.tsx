@@ -20,6 +20,7 @@ type DestMode = "same" | "server" | "custom";
 
 interface Backup {
   id: string; name: string; server_id: string | null; server_name: string | null;
+  backup_type?: string;
   source_paths: string[] | null; restore_confidence: number; risk_level: string;
 }
 interface RestoreAnalysis {
@@ -215,6 +216,9 @@ export default function RestorePage() {
                   <span className="text-emerald-700 font-bold">{selectedBackup.restore_confidence.toFixed(0)}%</span>
                   <span className="mx-2 text-gray-300">·</span>
                   <Badge variant={selectedBackup.risk_level === "low" ? "success" : "warning"} >{selectedBackup.risk_level} risk</Badge>
+                  {selectedBackup.backup_type === "docker" && (
+                    <p className="mt-1 text-xs text-emerald-700">Container backup selected. Restore will target the selected remote server/path for Docker archive recovery.</p>
+                  )}
                 </div>
               </div>
             )}

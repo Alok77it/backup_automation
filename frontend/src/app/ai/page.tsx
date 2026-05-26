@@ -53,6 +53,18 @@ interface AIStatus {
   openai: boolean;
 }
 
+interface DevOpsApproval {
+  id: string;
+  title: string;
+  description: string | null;
+  action_type: string;
+  action_payload: Record<string, unknown> | null;
+  risk_level: string;
+  server_id: string | null;
+  status: string;
+  created_at: string;
+}
+
 // ── Suggestions ───────────────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
@@ -259,6 +271,58 @@ function ActionCard({
   );
 }
 
+function DevOpsApprovalCard({
+  approval,
+  onDone,
+}: {
+  approval: DevOpsApproval;
+  onDone: (id: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function decide(action: "approve" | "reject") {
+    setBusy(true);
+    try {
+      await api(`/approvals/${approval.id}/${action}`, {
+        method: "POST",
+        body: JSON.stringify({ note: `${action}d from AI Intelligence` }),
+      });
+      onDone(approval.id);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : `${action} failed`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-white p-4 text-sm">
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div>
+          <div className="font-semibold text-slate-900">{approval.title}</div>
+          <div className="text-xs text-slate-500">{approval.action_type} - {new Date(approval.created_at).toLocaleString()}</div>
+        </div>
+        <RiskBadge level={approval.risk_level} />
+      </div>
+      {approval.description && (
+        <pre className="mb-3 max-h-28 overflow-auto rounded-lg bg-slate-900 p-2 text-xs text-emerald-300 whitespace-pre-wrap">
+          {approval.description}
+        </pre>
+      )}
+      <div className="flex gap-2">
+        <Button size="sm" disabled={busy} onClick={() => decide("approve")} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+          {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />}
+          Approve &amp; Run
+        </Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => decide("reject")}>
+          <ShieldX className="mr-1.5 h-3.5 w-3.5" />
+          Reject
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AIPage() {
@@ -270,6 +334,7 @@ export default function AIPage() {
     },
   ]);
   const [pendingActions, setPendingActions] = useState<AIAction[]>([]);
+  const [pendingDevOpsApprovals, setPendingDevOpsApprovals] = useState<DevOpsApproval[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -289,6 +354,9 @@ export default function AIPage() {
     // Fetch any existing pending actions from previous sessions
     api<AIAction[]>("/ai/actions?status=pending_approval")
       .then(setPendingActions)
+      .catch(() => {});
+    api<DevOpsApproval[]>("/approvals/pending")
+      .then(setPendingDevOpsApprovals)
       .catch(() => {});
   }, []);
 
@@ -389,7 +457,7 @@ export default function AIPage() {
 
       {/* Pending approvals from previous sessions */}
       <AnimatePresence>
-        {pendingActions.length > 0 && (
+        {(pendingActions.length > 0 || pendingDevOpsApprovals.length > 0) && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -400,10 +468,17 @@ export default function AIPage() {
               <CardHeader className="pb-2 pt-4 px-4">
                 <CardTitle className="flex items-center gap-2 text-sm text-amber-800">
                   <Clock className="h-4 w-4" />
-                  {pendingActions.length} pending action{pendingActions.length > 1 ? "s" : ""} awaiting approval
+                  {pendingActions.length + pendingDevOpsApprovals.length} pending action{pendingActions.length + pendingDevOpsApprovals.length > 1 ? "s" : ""} awaiting approval
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4 space-y-3">
+                {pendingDevOpsApprovals.map((approval) => (
+                  <DevOpsApprovalCard
+                    key={approval.id}
+                    approval={approval}
+                    onDone={(id) => setPendingDevOpsApprovals((prev) => prev.filter((a) => a.id !== id))}
+                  />
+                ))}
                 {pendingActions.map((a) => (
                   <ActionCard key={a.id} action={a} onUpdate={updateActionInMessages} />
                 ))}

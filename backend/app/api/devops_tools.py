@@ -16,10 +16,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
+from app.core.security import decrypt_secret, encrypt_secret
 from app.models.entities import OrganizationMember
-from app.models.devops_entities import RiskLevel, SSLStatus
+from app.models.devops_entities import RiskLevel, SSLStatus, StoredCredential
 from app.services.execution_engine import execution_engine
 from app.services.ssl_service import ssl_service
 
@@ -87,6 +89,189 @@ class ProxyConfigOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class CredentialCreate(BaseModel):
+    provider: str = Field(..., pattern="^(agent|docker|github)$")
+    label: str = Field(..., min_length=1, max_length=120)
+    server_id: uuid.UUID | None = None
+    username: str | None = None
+    secret: str = Field(..., min_length=1)
+    registry_url: str | None = None
+    metadata_json: dict | None = None
+
+
+class CredentialOut(BaseModel):
+    id: uuid.UUID
+    provider: str
+    label: str
+    server_id: uuid.UUID | None
+    username: str | None
+    registry_url: str | None
+    metadata_json: dict | None
+    is_active: bool
+    created_at: datetime
+    secret_preview: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class GithubRunRequest(BaseModel):
+    server_id: uuid.UUID
+    agent_credential_id: uuid.UUID
+    github_credential_id: uuid.UUID
+    repo_url: str
+    run_script: str
+    install_path: str | None = None
+    timeout_seconds: int = Field(1800, ge=60, le=7200)
+
+
+async def _get_credential(
+    db: DbSession,
+    *,
+    organization_id: uuid.UUID,
+    credential_id: uuid.UUID,
+    provider: str,
+) -> StoredCredential:
+    result = await db.execute(
+        select(StoredCredential).where(
+            StoredCredential.id == credential_id,
+            StoredCredential.organization_id == organization_id,
+            StoredCredential.provider == provider,
+            StoredCredential.is_active == True,
+        )
+    )
+    cred = result.scalar_one_or_none()
+    if not cred:
+        raise HTTPException(status_code=404, detail=f"{provider} credential not found")
+    return cred
+
+
+def _credential_out(cred: StoredCredential) -> CredentialOut:
+    preview = None
+    try:
+        secret = decrypt_secret(cred.encrypted_secret)
+        preview = f"...{secret[-4:]}" if len(secret) >= 4 else "***"
+    except Exception:
+        preview = "***"
+    return CredentialOut(
+        id=cred.id,
+        provider=cred.provider,
+        label=cred.label,
+        server_id=cred.server_id,
+        username=cred.username,
+        registry_url=cred.registry_url,
+        metadata_json=cred.metadata_json,
+        is_active=cred.is_active,
+        created_at=cred.created_at,
+        secret_preview=preview,
+    )
+
+
+@router.get("/credentials", response_model=list[CredentialOut])
+async def list_credentials(
+    db: DbSession,
+    membership: OrgMembership,
+    provider: str | None = None,
+    server_id: uuid.UUID | None = None,
+):
+    stmt = select(StoredCredential).where(
+        StoredCredential.organization_id == membership.organization_id,
+        StoredCredential.is_active == True,
+    )
+    if provider:
+        stmt = stmt.where(StoredCredential.provider == provider)
+    if server_id:
+        stmt = stmt.where(StoredCredential.server_id == server_id)
+    result = await db.execute(stmt.order_by(StoredCredential.provider, StoredCredential.label))
+    return [_credential_out(c) for c in result.scalars().all()]
+
+
+@router.post("/credentials", response_model=CredentialOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_csrf)])
+async def create_credential(
+    body: CredentialCreate,
+    db: DbSession,
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:write"))],
+):
+    cred = StoredCredential(
+        organization_id=membership.organization_id,
+        server_id=body.server_id,
+        provider=body.provider,
+        label=body.label,
+        username=body.username,
+        encrypted_secret=encrypt_secret(body.secret),
+        registry_url=body.registry_url,
+        metadata_json=body.metadata_json or {},
+        created_by=membership.user_id,
+        is_active=True,
+    )
+    db.add(cred)
+    await db.commit()
+    await db.refresh(cred)
+    return _credential_out(cred)
+
+
+@router.delete("/credentials/{credential_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(verify_csrf)])
+async def delete_credential(
+    credential_id: uuid.UUID,
+    db: DbSession,
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:write"))],
+):
+    result = await db.execute(
+        select(StoredCredential).where(
+            StoredCredential.id == credential_id,
+            StoredCredential.organization_id == membership.organization_id,
+            StoredCredential.is_active == True,
+        )
+    )
+    cred = result.scalar_one_or_none()
+    if not cred:
+        raise HTTPException(status_code=404, detail="Credential not found")
+    cred.is_active = False
+    await db.commit()
+
+
+@router.post("/github/run", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_csrf)])
+async def run_github_repo(
+    body: GithubRunRequest,
+    db: DbSession,
+    request: Request,
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:write"))],
+):
+    agent = await _get_credential(
+        db,
+        organization_id=membership.organization_id,
+        credential_id=body.agent_credential_id,
+        provider="agent",
+    )
+    github = await _get_credential(
+        db,
+        organization_id=membership.organization_id,
+        credential_id=body.github_credential_id,
+        provider="github",
+    )
+    job = await execution_engine.submit_job(
+        db,
+        organization_id=membership.organization_id,
+        server_id=body.server_id,
+        created_by=membership.user_id,
+        job_type="agent_command",
+        payload={
+            "command": "github_repo_run",
+            "_agent_token_raw": decrypt_secret(agent.encrypted_secret),
+            "args": {
+                "repo_url": body.repo_url,
+                "run_script": body.run_script,
+                "install_path": body.install_path,
+                "github_user": github.username,
+                "github_token": decrypt_secret(github.encrypted_secret),
+            },
+        },
+        risk_level=RiskLevel.HIGH,
+        timeout_seconds=body.timeout_seconds,
+        ip_address=request.client.host if request.client else None,
+    )
+    return {"message": "GitHub repo run submitted", "job_id": str(job.id), "approval_id": str(job.approval_id) if job.approval_id else None}
 
 
 # ---------------------------------------------------------------------------

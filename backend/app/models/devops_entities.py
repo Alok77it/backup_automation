@@ -198,6 +198,34 @@ class AgentToken(Base):
     __table_args__ = (Index("ix_agent_token_hash", "token_hash"),)
 
 
+class StoredCredential(Base):
+    """Encrypted reusable credentials for remote agent, Docker, and GitHub operations."""
+    __tablename__ = "stored_credentials"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "server_id", "provider", "label", name="uq_credential_scope_provider_label"),
+        Index("ix_credentials_org_provider", "organization_id", "provider"),
+        Index("ix_credentials_server", "server_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    server_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"))
+    provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    label: Mapped[str] = mapped_column(String(120), nullable=False)
+    username: Mapped[str | None] = mapped_column(String(255))
+    encrypted_secret: Mapped[str] = mapped_column(Text, nullable=False)
+    registry_url: Mapped[str | None] = mapped_column(String(500))
+    metadata_json: Mapped[dict | None] = mapped_column(JSON)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 # ---------------------------------------------------------------------------
 # DevOps Jobs — every action goes through the job queue
 # ---------------------------------------------------------------------------

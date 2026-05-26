@@ -13,10 +13,12 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
+from app.core.security import decrypt_secret
 from app.models.entities import OrganizationMember
-from app.models.devops_entities import DevOpsPlugin, PluginInstallation, PluginStatus, RiskLevel
+from app.models.devops_entities import DevOpsPlugin, PluginInstallation, PluginStatus, RiskLevel, StoredCredential
 from app.services.execution_engine import execution_engine
 from app.services.plugin_manager import (
     PluginAlreadyInstalledError,
@@ -25,6 +27,27 @@ from app.services.plugin_manager import (
 )
 
 router = APIRouter(prefix="/plugins", tags=["Plugin System"])
+
+
+async def _credential_secret(
+    db: DbSession,
+    *,
+    organization_id: uuid.UUID,
+    credential_id: uuid.UUID,
+    provider: str,
+) -> tuple[StoredCredential, str]:
+    result = await db.execute(
+        select(StoredCredential).where(
+            StoredCredential.id == credential_id,
+            StoredCredential.organization_id == organization_id,
+            StoredCredential.provider == provider,
+            StoredCredential.is_active == True,
+        )
+    )
+    cred = result.scalar_one_or_none()
+    if not cred:
+        raise HTTPException(status_code=404, detail=f"{provider} credential not found")
+    return cred, decrypt_secret(cred.encrypted_secret)
 
 
 class PluginOut(BaseModel):
@@ -47,6 +70,11 @@ class PluginOut(BaseModel):
 class PluginInstallRequest(BaseModel):
     server_id: uuid.UUID
     config: dict[str, Any] | None = None
+    agent_token_raw: str | None = None
+    agent_credential_id: uuid.UUID | None = None
+    docker_credential_id: uuid.UUID | None = None
+    github_credential_id: uuid.UUID | None = None
+    agent_port: int = 9977
 
 
 class PluginInstallOut(BaseModel):
@@ -137,6 +165,77 @@ async def install_plugin(
             ip_address=request.client.host if request.client else None,
         )
 
+        config = body.config or {}
+        agent_token = body.agent_token_raw
+        if not agent_token and body.agent_credential_id:
+            _, agent_token = await _credential_secret(
+                db,
+                organization_id=membership.organization_id,
+                credential_id=body.agent_credential_id,
+                provider="agent",
+            )
+        if body.docker_credential_id:
+            docker_cred, docker_token = await _credential_secret(
+                db,
+                organization_id=membership.organization_id,
+                credential_id=body.docker_credential_id,
+                provider="docker",
+            )
+            config.setdefault("docker_username", docker_cred.username)
+            config.setdefault("docker_token", docker_token)
+            config.setdefault("docker_registry", docker_cred.registry_url or "docker.io")
+        if body.github_credential_id:
+            github_cred, github_token = await _credential_secret(
+                db,
+                organization_id=membership.organization_id,
+                credential_id=body.github_credential_id,
+                provider="github",
+            )
+            config.setdefault("github_user", github_cred.username)
+            config.setdefault("github_token", github_token)
+        compose_content = None
+        command = "plugin_install"
+        args: dict[str, Any] = {
+            "plugin_id": plugin_id,
+            "config": config,
+            "install_path": config.get("install_path") or f"/opt/{plugin_id}",
+        }
+        template = plugin_manager.get_compose_template(plugin_id)
+        if template:
+            from jinja2 import Template
+            compose_content = Template(template).render(**config)
+            args["compose_content"] = compose_content
+        else:
+            install_script = plugin_manager.get_plugin_script_path(plugin_id, "install.sh")
+            if install_script:
+                command = "script_run_approved"
+                args = {"script_content": install_script.read_text()}
+
+        access_url = None
+        if plugin_id == "n8n":
+            host = config.get("n8n_host") or config.get("public_ip")
+            port = config.get("n8n_port", 5678)
+            access_url = f"http://{host}:{port}" if host else None
+        elif plugin_id == "jenkins":
+            host = config.get("public_ip")
+            port = config.get("jenkins_port", 8080)
+            access_url = f"http://{host}:{port}" if host else None
+
+        if access_url:
+            install.access_url = access_url
+
+        payload = {
+            "installation_id": str(install.id),
+            "plugin_id": plugin_id,
+            "config": config,
+            "command": command,
+            "args": args,
+            "access_url": access_url,
+            "agent_port": body.agent_port,
+        }
+        if agent_token:
+            payload["_agent_token_raw"] = agent_token
+
         job = await execution_engine.submit_job(
             db,
             organization_id=membership.organization_id,
@@ -144,13 +243,7 @@ async def install_plugin(
             created_by=membership.user_id,
             job_type="plugin_install",
             plugin_id=plugin_id,
-            payload={
-                "installation_id": str(install.id),
-                "plugin_id": plugin_id,
-                "config": body.config or {},
-                "command": "plugin_install",
-                "args": {"plugin_id": plugin_id, "config": body.config or {}},
-            },
+            payload=payload,
             risk_level=RiskLevel.HIGH,
             timeout_seconds=600,
             ip_address=request.client.host if request.client else None,

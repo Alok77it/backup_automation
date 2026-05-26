@@ -137,7 +137,8 @@ async def _route_job(db, job) -> dict:
 async def _handle_agent_command(db, job) -> dict:
     from sqlalchemy import select
     from app.models.entities import Server
-    from app.models.devops_entities import AgentToken
+    from app.models.devops_entities import AgentToken, StoredCredential
+    from app.core.security import decrypt_secret
     from app.services.agent_comm import agent_comm
 
     payload = job.payload or {}
@@ -157,12 +158,24 @@ async def _handle_agent_command(db, job) -> dict:
         )
     )
     token = token_result.scalar_one_or_none()
-    if not token:
-        raise ValueError("No active agent token for this server — install agent first")
+    if not token and not (payload.get("_agent_token_raw") or payload.get("agent_credential_id")):
+        raise ValueError("No active agent token for this server and no stored agent credential was provided")
 
     # NOTE: raw token NOT stored; we use the job payload for one-time commands.
     # For scheduled tasks, the raw token is retrieved from secrets manager.
     raw_token = payload.get("_agent_token_raw")
+    if not raw_token and payload.get("agent_credential_id"):
+        cred_result = await db.execute(
+            select(StoredCredential).where(
+                StoredCredential.id == uuid.UUID(payload["agent_credential_id"]),
+                StoredCredential.organization_id == job.organization_id,
+                StoredCredential.provider == "agent",
+                StoredCredential.is_active == True,
+            )
+        )
+        cred = cred_result.scalar_one_or_none()
+        if cred:
+            raw_token = decrypt_secret(cred.encrypted_secret)
     if not raw_token:
         raise ValueError("Agent token missing from job payload")
 
@@ -207,15 +220,6 @@ async def _handle_plugin_install(db, job) -> dict:
     if not plugin_id:
         raise ValueError("plugin_id is required for plugin_install job")
 
-    # Get the compose template and render with config
-    template = plugin_manager.get_compose_template(plugin_id)
-    if not template:
-        raise ValueError(f"No docker-compose template found for plugin '{plugin_id}'")
-
-    install_script = plugin_manager.get_plugin_script_path(plugin_id, "install.sh")
-    if not install_script:
-        raise ValueError(f"No install.sh found for plugin '{plugin_id}'")
-
     # Delegate actual execution to agent command
     agent_result = await _handle_agent_command(db, job)
 
@@ -227,6 +231,8 @@ async def _handle_plugin_install(db, job) -> dict:
             installation_id=uuid.UUID(installation_id),
             status=PluginStatus.INSTALLED if success else PluginStatus.FAILED,
             error_message=None if success else agent_result.get("output", ""),
+            access_url=payload.get("access_url"),
+            install_path=(payload.get("args") or {}).get("install_path"),
         )
 
     return agent_result

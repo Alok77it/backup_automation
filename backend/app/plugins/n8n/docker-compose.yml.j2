@@ -14,7 +14,9 @@ services:
       - N8N_HOST={{ n8n_host }}
       - N8N_PORT=5678
       - N8N_PROTOCOL={{ 'https' if ssl_enabled else 'http' }}
-      - WEBHOOK_URL={{ 'https' if ssl_enabled else 'http' }}://{{ n8n_host }}/
+      - WEBHOOK_URL={{ webhook_url | default(('https' if ssl_enabled else 'http') ~ '://' ~ n8n_host ~ ('' if ssl_enabled else ':' ~ (n8n_port | default(5678))) ~ '/') }}
+      - N8N_SECURE_COOKIE={{ 'true' if ssl_enabled else 'false' }}
+      - N8N_PROXY_HOPS=1
       - N8N_BASIC_AUTH_ACTIVE={{ 'true' if n8n_basic_auth_active else 'false' }}
       - N8N_BASIC_AUTH_USER={{ n8n_basic_auth_user | default('admin') }}
       - N8N_BASIC_AUTH_PASSWORD={{ n8n_basic_auth_password }}

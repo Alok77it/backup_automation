@@ -92,9 +92,19 @@ COMMAND_DEFINITIONS: dict[str, dict] = {
         "cmd": ["docker", "restart"],
         "allowed_args": ["container_name"],
     },
+    "container_start": {
+        "cmd": ["docker", "start"],
+        "allowed_args": ["container_name"],
+    },
     "container_stop": {
         "cmd": ["docker", "stop"],
         "allowed_args": ["container_name"],
+    },
+    "container_remove": {
+        "handler": "container_remove",
+    },
+    "container_create": {
+        "handler": "container_create",
     },
     "service_status": {
         "cmd": ["systemctl", "status"],
@@ -145,6 +155,12 @@ COMMAND_DEFINITIONS: dict[str, dict] = {
     },
     "script_run_approved": {
         "handler": "run_approved_script",
+    },
+    "package_install": {
+        "handler": "package_install",
+    },
+    "github_repo_run": {
+        "handler": "github_repo_run",
     },
 }
 
@@ -262,6 +278,18 @@ async def _dispatch(command: str, args: dict, timeout: int) -> tuple[Any, int]:
     if handler == "run_approved_script":
         return await _run_approved_script(args, timeout), 0
 
+    if handler == "container_create":
+        return await _container_create(args, timeout), 0
+
+    if handler == "container_remove":
+        return await _container_remove(args, timeout), 0
+
+    if handler == "package_install":
+        return await _package_install(args, timeout), 0
+
+    if handler == "github_repo_run":
+        return await _github_repo_run(args, timeout), 0
+
     if handler == "builtin_passthrough":
         cmd_base = defn.get("cmd", [])
         return await _run_subprocess(cmd_base, timeout), 0
@@ -296,6 +324,8 @@ async def _run_subprocess(cmd: list[str], timeout: int) -> str:
         )
     )
     combined = (result.stdout or "") + (result.stderr or "")
+    if result.returncode != 0:
+        raise RuntimeError(combined[:50000] or f"Command failed with exit code {result.returncode}")
     return combined[:50000]
 
 
@@ -402,6 +432,100 @@ async def _compose_operation(operation: str, args: dict, timeout: int) -> str:
         return "Unknown compose operation"
 
     return await _run_subprocess(cmd, timeout)
+
+
+def _safe_name(value: str, fallback: str = "managed") -> str:
+    allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"
+    cleaned = "".join(ch for ch in str(value or fallback) if ch in allowed)
+    return cleaned[:80] or fallback
+
+
+async def _docker_login(args: dict, timeout: int) -> str:
+    username = args.get("docker_username")
+    token = args.get("docker_token")
+    registry = args.get("docker_registry") or "docker.io"
+    if not username or not token:
+        return ""
+    return await _run_subprocess(["docker", "login", registry, "-u", str(username), "-p", str(token)], timeout)
+
+
+async def _container_create(args: dict, timeout: int) -> str:
+    image = str(args.get("image") or "").strip()
+    if not image:
+        return "image is required"
+
+    output = await _docker_login(args, timeout)
+    name = _safe_name(args.get("name") or image.split("/")[-1].split(":")[0])
+    cmd = ["docker", "run", "-d", "--name", name]
+
+    for port in args.get("ports") or []:
+        port = str(port).strip()
+        if port and all(ch.isdigit() or ch in ":/" for ch in port):
+            cmd.extend(["-p", port])
+    for env in args.get("env") or []:
+        env = str(env).strip()
+        if env and "=" in env and "\n" not in env:
+            cmd.extend(["-e", env])
+    for volume in args.get("volumes") or []:
+        volume = str(volume).strip()
+        if volume and ":" in volume and "\n" not in volume:
+            cmd.extend(["-v", volume])
+
+    restart_policy = args.get("restart_policy") or "unless-stopped"
+    if restart_policy in {"no", "always", "on-failure", "unless-stopped"}:
+        cmd.extend(["--restart", restart_policy])
+
+    cmd.append(image)
+    result = await _run_subprocess(cmd, timeout)
+    return (output + "\n" + result).strip()
+
+
+async def _container_remove(args: dict, timeout: int) -> str:
+    name = _safe_name(args.get("container_name") or args.get("name"))
+    force = bool(args.get("force", True))
+    cmd = ["docker", "rm"]
+    if force:
+        cmd.append("-f")
+    cmd.append(name)
+    return await _run_subprocess(cmd, timeout)
+
+
+async def _package_install(args: dict, timeout: int) -> str:
+    packages = [_safe_name(p, "") for p in (args.get("packages") or [])]
+    packages = [p for p in packages if p]
+    if not packages:
+        return "No packages provided"
+    if os.path.exists("/usr/bin/apt-get"):
+        return await _run_subprocess(["apt-get", "update"], timeout) + await _run_subprocess(["apt-get", "install", "-y", *packages], timeout)
+    if os.path.exists("/usr/bin/yum"):
+        return await _run_subprocess(["yum", "install", "-y", *packages], timeout)
+    if os.path.exists("/usr/bin/dnf"):
+        return await _run_subprocess(["dnf", "install", "-y", *packages], timeout)
+    return "No supported package manager found"
+
+
+async def _github_repo_run(args: dict, timeout: int) -> str:
+    repo_url = str(args.get("repo_url") or "").strip()
+    run_script = str(args.get("run_script") or "").strip()
+    github_user = str(args.get("github_user") or "").strip()
+    github_token = str(args.get("github_token") or "").strip()
+    if not repo_url or not run_script:
+        return "repo_url and run_script are required"
+    if github_user and github_token and repo_url.startswith("https://github.com/"):
+        repo_url = repo_url.replace("https://", f"https://{github_user}:{github_token}@")
+
+    install_path = args.get("install_path") or f"/opt/github-runs/{_safe_name(repo_url.split('/')[-1].replace('.git', ''))}"
+    os.makedirs(os.path.dirname(install_path), exist_ok=True)
+    if os.path.exists(install_path):
+        await _run_subprocess(["git", "-C", install_path, "pull", "--ff-only"], timeout)
+    else:
+        await _run_subprocess(["git", "clone", repo_url, install_path], timeout)
+
+    script_path = os.path.join(install_path, ".codex-run.sh")
+    with open(script_path, "w") as f:
+        f.write(run_script)
+    os.chmod(script_path, 0o700)
+    return await _run_subprocess(["/bin/bash", script_path], timeout)
 
 
 async def _run_approved_script(args: dict, timeout: int) -> str:
