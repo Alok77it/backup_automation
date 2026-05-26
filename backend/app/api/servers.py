@@ -9,7 +9,7 @@ from app.core.dependencies import DbSession, require_permission, verify_csrf
 from app.models.entities import OrganizationMember
 from app.core.security import encrypt_secret
 from app.models.entities import Backup, MetricSnapshot, Server, ServerStatus
-from app.models.devops_entities import DevOpsJob
+from app.models.devops_entities import DevOpsJob, StoredCredential
 from app.schemas.resources import ServerConnectionTest, ServerCreate, ServerResponse, ServerUpdate
 from app.services.audit import log_audit
 from app.services.logging_service import create_log
@@ -76,6 +76,26 @@ async def create_server(
     )
     db.add(server)
     await db.flush()
+    agent_secret = data.private_key if data.auth_method == "key" else data.password
+    if agent_secret:
+        db.add(
+            StoredCredential(
+                organization_id=membership.organization_id,
+                server_id=server.id,
+                provider="agent",
+                label=f"{server.name} agent",
+                username=server.username,
+                encrypted_secret=encrypt_secret(agent_secret),
+                metadata_json={
+                    "auto_created_from_server": True,
+                    "hostname": server.hostname,
+                    "ssh_port": server.port,
+                    "auth_method": data.auth_method,
+                },
+                created_by=membership.user_id,
+                is_active=True,
+            )
+        )
     await log_audit(
         db,
         membership.organization_id,
