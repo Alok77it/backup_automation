@@ -92,12 +92,15 @@ class ProxyConfigOut(BaseModel):
 
 
 class CredentialCreate(BaseModel):
-    provider: str = Field(..., pattern="^(agent|docker|github)$")
+    # provider: agent | docker | github | jenkins | database | kubernetes
+    provider: str = Field(..., pattern="^(agent|docker|github|jenkins|database|kubernetes)$")
     label: str = Field(..., min_length=1, max_length=120)
     server_id: uuid.UUID | None = None
+    # username is required for all providers except agent (where it's optional)
     username: str | None = None
     secret: str = Field(..., min_length=1)
     registry_url: str | None = None
+    # extra fields stored in metadata_json (e.g. database host/port/dbname, jenkins_url)
     metadata_json: dict | None = None
 
 
@@ -112,6 +115,8 @@ class CredentialOut(BaseModel):
     is_active: bool
     created_at: datetime
     secret_preview: str | None = None
+    # display_name combines label + username for easy UI rendering
+    display_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -154,6 +159,11 @@ def _credential_out(cred: StoredCredential) -> CredentialOut:
         preview = f"...{secret[-4:]}" if len(secret) >= 4 else "***"
     except Exception:
         preview = "***"
+    # Build a human-readable display name
+    if cred.username:
+        display_name = f"{cred.label} ({cred.username})"
+    else:
+        display_name = cred.label
     return CredentialOut(
         id=cred.id,
         provider=cred.provider,
@@ -165,6 +175,7 @@ def _credential_out(cred: StoredCredential) -> CredentialOut:
         is_active=cred.is_active,
         created_at=cred.created_at,
         secret_preview=preview,
+        display_name=display_name,
     )
 
 

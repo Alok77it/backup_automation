@@ -27,12 +27,19 @@ logger = logging.getLogger(__name__)
 SYSTEM_PROMPT = """You are Backup Intelligence AI — an expert infrastructure, backup, and DevOps assistant.
 
 ## Your Capabilities
-You have access to REAL-TIME platform data:
-- All servers, their status, CPU/memory/disk metrics
-- All backup jobs with health scores, recent run history, errors
-- Recent error/warning log entries
-- Unresolved alerts
-- Storage usage and trends
+You have access to REAL-TIME platform metrics and operational data:
+- All servers: status, CPU %, memory %, disk % usage
+- All backup jobs: health scores, restore confidence, risk levels, last run status
+- Unresolved alert counts and thresholds
+- Storage usage and quota trends
+- Backup failure counts and patterns (NOT raw log content)
+
+## Important Restrictions
+- You do NOT have access to raw log file contents — this is a deliberate security boundary.
+- Do NOT ask for or reference raw log entries, log files, or log output.
+- Base ALL analysis strictly on the structured metrics and health data provided in context.
+- If asked to analyze logs, politely explain that logs are excluded for security reasons and
+  offer metrics-based insights instead.
 
 ## How to Propose Actions
 When you identify something that should be fixed on a server, you can propose an SSH command.
@@ -40,7 +47,7 @@ Format it EXACTLY like this — one block per action:
 
 <ACTION>
 title: Short title (max 80 chars)
-description: Why this action is needed (1-2 sentences)
+description: Why this action is needed based on metrics (1-2 sentences)
 server_id: <exact UUID from the context>
 command: <shell command to run>
 risk_level: low|medium|high
@@ -53,12 +60,17 @@ Rules for actions:
 - You may propose multiple actions in one response
 - The user will review and approve/reject each action before anything runs
 
-## What to Analyze
-Focus on: backup failures, performance degradation, server risks, storage pressure,
-restore readiness, SSH/connectivity issues, service health on servers.
+## What to Analyze (Metrics Only)
+Focus on:
+- CPU/memory/disk metrics — identify servers over threshold
+- Backup health scores below 70% — flag risk
+- Restore confidence levels — assess recovery readiness
+- Storage utilization vs quota
+- Alert counts and severity
+- Backup success/failure rates from structured run data
 
-Be concise, technical, and specific. Reference actual data from context.
-Use markdown formatting (headers, code blocks, bullet lists) for clarity."""
+Be concise, technical, and specific. Reference actual metric values from context.
+Use markdown formatting (headers, tables, bullet lists) for clarity."""
 
 
 # ─── Action parsing ──────────────────────────────────────────────────────────
@@ -138,16 +150,24 @@ async def get_ai_response(
     context_block = ""
     if context:
         # Only include the most critical context to keep tokens manageable
+        # NOTE: raw log entries are intentionally excluded — security boundary.
+        # Only structured metrics and health data are passed to the AI.
+        recent_failures_clean = [
+            {k: v for k, v in f.items() if k != "log_tail"}
+            for f in context.get("recent_failures", [])[:5]
+        ]
         trimmed = {
             "servers": context.get("all_servers", [])[:10],
             "servers_at_risk": context.get("servers_at_risk", [])[:5],
             "backups_at_risk": context.get("backups_at_risk", [])[:5],
-            "recent_failures": context.get("recent_failures", [])[:5],
-            "recent_errors": context.get("recent_errors", [])[:10],
+            "recent_failures": recent_failures_clean,
+            # recent_errors intentionally omitted — log content is a security boundary
             "unresolved_alerts": context.get("unresolved_alerts", 0),
             "storage_used_gb": context.get("storage_used_gb", 0),
             "storage_quota_gb": context.get("storage_quota_gb", 100),
             "avg_restore_confidence": context.get("avg_restore_confidence", 0),
+            "total_backups": context.get("total_backups", 0),
+            "avg_health_score": context.get("avg_health_score", 0),
         }
         context_json = json.dumps(trimmed, indent=2, default=str)
         if len(context_json) > 8000:
@@ -295,11 +315,17 @@ def _heuristic_response(message: str, context: dict | None) -> str:
         )
 
     if "log" in msg_lower:
-        logs = ctx.get("recent_errors", [])
-        if logs:
-            lines = "\n".join(f"- `{l.get('level', 'info').upper()}` — {l.get('message', '')[:120]}" for l in logs[:10])
-            return f"## Recent Log Errors\n\n{lines}"
-        return "No recent errors found in system logs."
+        return (
+            "## Log Analysis Not Available\n\n"
+            "Raw log content is excluded for security reasons — logs may contain credentials, "
+            "tokens, or sensitive data.\n\n"
+            "**What I can analyze instead:**\n"
+            "- Backup failure rates and error counts from structured run data\n"
+            "- Server health metrics (CPU, memory, disk)\n"
+            "- Backup health scores and restore confidence levels\n"
+            "- Unresolved alert counts\n\n"
+            "Try asking: *'Which backups are failing?'* or *'Show server health status'*"
+        )
 
     if "server" in msg_lower or "infrastructure" in msg_lower or "fleet" in msg_lower:
         all_servers = ctx.get("all_servers", [])
@@ -329,14 +355,14 @@ def _heuristic_response(message: str, context: dict | None) -> str:
 
 
 async def summarize_logs(logs: list[dict]) -> str:
-    if not logs:
-        return "No logs to summarize."
-    prompt = (
-        f"Summarize these {len(logs)} infrastructure/backup log entries. "
-        "Highlight errors, patterns, and actionable items:\n"
+    """
+    Log summarization is disabled — raw log content is excluded from AI analysis
+    for security reasons (logs may contain credentials, tokens, or sensitive data).
+    """
+    return (
+        "Log summarization is not available. Raw log content is excluded from AI analysis "
+        "as a security measure. Use the Metrics and Backup Health views for insights."
     )
-    prompt += json.dumps(logs[:50], default=str)
-    return await get_ai_response(prompt, {"log_count": len(logs)})
 
 
 async def analyze_backup_failure(error: str, logs: str, metadata: dict) -> str:

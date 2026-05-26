@@ -67,13 +67,14 @@ interface DevOpsApproval {
 
 // ── Suggestions ───────────────────────────────────────────────────────────────
 
+// Metrics-only suggestions — raw log analysis is excluded for security
 const SUGGESTIONS = [
-  "Analyze recent backup failures",
   "Show server health status",
-  "Check storage usage",
   "Which backups are at risk?",
+  "Check storage usage vs quota",
   "Review unresolved alerts",
-  "Suggest disk cleanup commands",
+  "Which servers have high CPU or disk usage?",
+  "What is my average restore confidence?",
 ];
 
 // ── Risk badge ────────────────────────────────────────────────────────────────
@@ -330,7 +331,7 @@ export default function AIPage() {
     {
       role: "assistant",
       content:
-        "I'm your Backup Intelligence AI. I read your live system data — servers, backups, logs, alerts — and give you actionable insights.\n\nI can also propose SSH commands to fix issues on your servers. You'll see an approval card before anything runs.",
+        "I'm your Backup Intelligence AI. I analyze your live infrastructure metrics — server health, backup health scores, restore confidence, storage usage, and alerts — and give you actionable insights.\n\nI can also propose SSH commands to fix issues. You'll see an approval card before anything runs.\n\n**Note:** Raw log content is excluded for security reasons (logs may contain credentials or sensitive data). All analysis is based on structured metrics only.",
     },
   ]);
   const [pendingActions, setPendingActions] = useState<AIAction[]>([]);

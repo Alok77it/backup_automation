@@ -139,12 +139,13 @@ async def _build_context(db, org_id: uuid.UUID) -> dict:
         .order_by(BackupRun.started_at.desc())
         .limit(10)
     )
+    # NOTE: log_tail is intentionally excluded — raw log content is a security boundary.
     recent_failures = [
         {
             "backup_name": backup.name,
             "run_id": str(run.id),
             "error": run.error_message or "Unknown error",
-            "log_tail": (run.log_output or "")[-500:] if run.log_output else None,
+            # log_tail deliberately omitted — logs may contain credentials/tokens
             "failed_at": run.started_at.isoformat() if run.started_at else None,
             "server": next(
                 (s["hostname"] for s in all_servers if s["id"] == str(backup.server_id)),
@@ -154,27 +155,10 @@ async def _build_context(db, org_id: uuid.UUID) -> dict:
         for run, backup in failed_result.all()
     ]
 
-    # ── Recent log entries (errors + warnings) ────────────────────────────────
-    logs_result = await db.execute(
-        select(LogEntry)
-        .where(
-            LogEntry.organization_id == org_id,
-            LogEntry.level.in_(["error", "warning", "critical"]),
-        )
-        .order_by(LogEntry.created_at.desc())
-        .limit(20)
-    )
-    recent_errors = [
-        {
-            "level": le.level,
-            "source": le.source,
-            "message": le.message[:300],
-            "created_at": le.created_at.isoformat(),
-            "server_id": str(le.server_id) if le.server_id else None,
-            "backup_id": str(le.backup_id) if le.backup_id else None,
-        }
-        for le in logs_result.scalars().all()
-    ]
+    # ── Log entries intentionally excluded from AI context ────────────────────
+    # Raw logs may contain credentials, tokens, or PII — security boundary.
+    # recent_errors is omitted; AI uses only structured metrics & health scores.
+    recent_errors: list = []
 
     # ── Alerts ────────────────────────────────────────────────────────────────
     alerts_result = await db.execute(
@@ -212,12 +196,16 @@ async def _build_context(db, org_id: uuid.UUID) -> dict:
         "all_backups": backups_info,
         "backups_at_risk": backups_at_risk,
         "recent_failures": recent_failures,
-        "recent_errors": recent_errors,
+        # recent_errors omitted intentionally — security boundary (logs may contain tokens/PII)
         "unresolved_alerts": len(unresolved_alert_list),
         "alert_details": unresolved_alert_list,
         "storage_used_gb": round(s.used_bytes / 1024**3, 2) if s else 0,
         "storage_quota_gb": 100,
         "avg_restore_confidence": round(float(avg_restore_conf or 0), 1),
+        "total_backups": len(backups_info),
+        "avg_health_score": round(
+            sum(b["health_score"] for b in backups_info) / len(backups_info), 1
+        ) if backups_info else 0,
     }
 
 
