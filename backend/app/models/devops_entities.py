@@ -52,6 +52,7 @@ def _make_enum(enum_cls, name: str):
         name=name,
         values_callable=lambda cls: [m.value for m in cls],
         native_enum=True,
+        create_type=False,
     )
 
 
