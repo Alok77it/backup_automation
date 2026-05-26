@@ -20,7 +20,7 @@ from app.core.dependencies import DbSession, OrgMembership, require_permission, 
 from app.core.security import decrypt_secret
 from app.models.devops_entities import RiskLevel, StoredCredential
 from app.models.entities import OrganizationMember, Server
-from app.services.agent_comm import agent_comm
+from app.services.agent_comm import AgentCommunicationError, agent_comm
 from app.services.container_service import container_service
 from app.services.execution_engine import execution_engine
 from app.services.ssh_service import run_ssh_command_sync
@@ -58,6 +58,12 @@ class ContainerSummaryOut(BaseModel):
     dead: int = 0
     paused: int = 0
     restarting: int = 0
+
+
+class DockerStatusOut(BaseModel):
+    docker_installed: bool
+    compose_available: bool
+    output: str | None = None
 
 
 class AgentActionRequest(BaseModel):
@@ -184,6 +190,41 @@ async def _refresh_snapshots_via_ssh(db: DbSession, membership: OrganizationMemb
     )
 
 
+async def _docker_status_via_ssh(db: DbSession, organization_id: uuid.UUID, server_id: uuid.UUID) -> DockerStatusOut:
+    server = await db.get(Server, server_id)
+    if not server or server.organization_id != organization_id:
+        raise HTTPException(status_code=404, detail="Server not found")
+    password = decrypt_secret(server.encrypted_password) if server.encrypted_password else None
+    private_key = decrypt_secret(server.encrypted_private_key) if server.encrypted_private_key else None
+    if not password and not private_key:
+        return DockerStatusOut(docker_installed=False, compose_available=False, output="No SSH credentials available")
+
+    import asyncio
+
+    command = "docker --version; docker compose version"
+    try:
+        exit_code, stdout, stderr = await asyncio.to_thread(
+            run_ssh_command_sync,
+            server.hostname,
+            server.port,
+            server.username,
+            command,
+            password,
+            private_key,
+            server.auth_method,
+            30,
+        )
+    except Exception as exc:
+        return DockerStatusOut(docker_installed=False, compose_available=False, output=str(exc))
+
+    output = f"{stdout or ''}{stderr or ''}".strip()
+    return DockerStatusOut(
+        docker_installed="Docker version" in output,
+        compose_available="Docker Compose version" in output,
+        output=output,
+    )
+
+
 @router.get("", response_model=list[ContainerSnapshotOut])
 async def list_containers(
     db: DbSession,
@@ -221,6 +262,15 @@ async def container_summary(
         server_id=server_id,
     )
     return ContainerSummaryOut(**summary)
+
+
+@router.get("/docker-status/{server_id}", response_model=DockerStatusOut)
+async def docker_status(
+    server_id: uuid.UUID,
+    db: DbSession,
+    membership: OrgMembership,
+):
+    return await _docker_status_via_ssh(db, membership.organization_id, server_id)
 
 
 @router.post("/refresh/{server_id}", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_csrf)])
@@ -418,20 +468,65 @@ async def _run_container_command_now(
     if not server or server.organization_id != membership.organization_id:
         raise HTTPException(status_code=404, detail="Server not found")
     token = await _resolve_agent_token(db, membership, body)
-    response = await agent_comm.execute(
-        server_hostname=server.hostname,
-        server_port=body.agent_port,
-        agent_token_raw=token,
-        command=command,
-        args=args,
-        timeout_seconds=timeout_seconds,
-    )
+    try:
+        response = await agent_comm.execute(
+            server_hostname=server.hostname,
+            server_port=body.agent_port,
+            agent_token_raw=token,
+            command=command,
+            args=args,
+            timeout_seconds=timeout_seconds,
+        )
+    except AgentCommunicationError:
+        response = None
+        password = decrypt_secret(server.encrypted_password) if server.encrypted_password else None
+        private_key = decrypt_secret(server.encrypted_private_key) if server.encrypted_private_key else None
+        shell = _container_ssh_command(command, args)
+        if shell and (password or private_key):
+            import asyncio
+
+            exit_code, stdout, stderr = await asyncio.to_thread(
+                run_ssh_command_sync,
+                server.hostname,
+                server.port,
+                server.username,
+                shell,
+                password,
+                private_key,
+                server.auth_method,
+                timeout_seconds,
+            )
+            return {
+                "success": exit_code == 0,
+                "exit_code": exit_code,
+                "output": f"{stdout or ''}{stderr or ''}",
+                "duration_ms": 0,
+            }
+        raise
     return {
         "success": response.success,
         "exit_code": response.exit_code,
         "output": response.output,
         "duration_ms": response.duration_ms,
     }
+
+
+def _container_ssh_command(command: str, args: dict) -> str | None:
+    import shlex
+
+    container = str(args.get("container_name") or "").strip()
+    if command == "container_logs" and container:
+        return f"docker logs --tail 200 {shlex.quote(container)}"
+    if command == "container_inspect" and container:
+        return f"docker inspect {shlex.quote(container)}"
+    if command == "container_exec" and container:
+        shell = str(args.get("shell") or "/bin/sh")
+        if shell not in {"/bin/sh", "/bin/bash", "sh", "bash"}:
+            shell = "/bin/sh"
+        exec_command = str(args.get("command") or "").strip()
+        if exec_command:
+            return f"docker exec {shlex.quote(container)} {shlex.quote(shell)} -lc {shlex.quote(exec_command)}"
+    return None
 
 
 @router.post("/inspect", dependencies=[Depends(verify_csrf)])

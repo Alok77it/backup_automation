@@ -64,6 +64,12 @@ interface CommandResult {
   duration_ms: number;
 }
 
+interface DockerStatus {
+  docker_installed: boolean;
+  compose_available: boolean;
+  output: string | null;
+}
+
 interface StoredCredential {
   id: string;
   provider: string;
@@ -346,12 +352,14 @@ export default function ContainersPage() {
       api<ContainerSummary>(
         `/containers/summary${selectedServer ? `?server_id=${selectedServer}` : ""}`
       ),
+      selectedServer
+        ? api<DockerStatus>(`/containers/docker-status/${selectedServer}`)
+        : Promise.resolve<DockerStatus>({ docker_installed: true, compose_available: true, output: null }),
     ])
-      .then(([c, s]) => {
+      .then(([c, s, dockerStatus]) => {
         setContainers(c);
         setSummary(s);
-        // If no containers have ever been recorded for this server, Docker may be missing
-        setDockerMissing(selectedServer !== "" && s.total === 0);
+        setDockerMissing(selectedServer !== "" && !dockerStatus.docker_installed);
       })
       .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load containers"))
       .finally(() => setLoading(false));
@@ -591,9 +599,9 @@ export default function ContainersPage() {
             <div className="flex items-start gap-2 flex-1">
               <span className="text-2xl shrink-0">🐳</span>
               <div>
-                <div className="font-semibold text-amber-800 text-sm">Docker may not be installed on this server</div>
+                <div className="font-semibold text-amber-800 text-sm">Docker is not available on this server</div>
                 <p className="text-xs text-amber-700 mt-0.5">
-                  No containers were found. If Docker is not installed, container actions will fail.
+                  Docker could not be detected over SSH. If Docker is not installed, container actions will fail.
                   Install Docker Engine first — it will be deployed automatically via the agent.
                 </p>
               </div>

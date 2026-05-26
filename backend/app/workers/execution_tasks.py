@@ -348,6 +348,119 @@ def _ssh_fallback_command(command: str, args: dict) -> str | None:
             f"printf %s {_shell_quote(encoded)} | base64 -d > {_shell_quote(install_path)}/docker-compose.yml; "
             f"docker compose -f {_shell_quote(install_path)}/docker-compose.yml up -d --pull always"
         )
+    if command == "docker_compose_down":
+        install_path = str(args.get("install_path") or "/opt/devops-plugin")
+        return f"docker compose -f {_shell_quote(install_path)}/docker-compose.yml down --remove-orphans"
+    if command == "plugin_uninstall":
+        plugin_id = str(args.get("plugin_id") or "devops-plugin")
+        install_path = str(args.get("install_path") or f"/opt/{plugin_id}")
+        return f"docker compose -f {_shell_quote(install_path)}/docker-compose.yml down --remove-orphans"
+    if command == "github_repo_run":
+        repo_url = str(args.get("repo_url") or "").strip()
+        run_script = str(args.get("run_script") or "").strip()
+        if not repo_url or not run_script:
+            return None
+        github_user = str(args.get("github_user") or "").strip()
+        github_token = str(args.get("github_token") or "").strip()
+        if github_user and github_token and repo_url.startswith("https://github.com/"):
+            repo_url = repo_url.replace("https://", f"https://{github_user}:{github_token}@")
+        import base64
+
+        default_name = repo_url.rstrip("/").split("/")[-1].replace(".git", "") or "repo"
+        install_path = str(args.get("install_path") or f"/opt/github-runs/{default_name}")
+        encoded_script = base64.b64encode(run_script.encode()).decode()
+        return (
+            "set -e; export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none; "
+            "if ! command -v git >/dev/null 2>&1; then "
+            "if command -v apt-get >/dev/null 2>&1; then apt-get update -y && apt-get install -y git; "
+            "elif command -v dnf >/dev/null 2>&1; then dnf install -y git; "
+            "elif command -v yum >/dev/null 2>&1; then yum install -y git; fi; fi; "
+            f"mkdir -p {_shell_quote('/'.join(install_path.split('/')[:-1]) or '/opt/github-runs')}; "
+            f"if [ -d {_shell_quote(install_path)}/.git ]; then git -C {_shell_quote(install_path)} pull --ff-only; "
+            f"else rm -rf {_shell_quote(install_path)} && git clone {_shell_quote(repo_url)} {_shell_quote(install_path)}; fi; "
+            f"printf %s {_shell_quote(encoded_script)} | base64 -d > {_shell_quote(install_path)}/.bi-run.sh; "
+            f"chmod 700 {_shell_quote(install_path)}/.bi-run.sh; cd {_shell_quote(install_path)}; /bin/bash ./.bi-run.sh"
+        )
+    if command == "container_create":
+        image = str(args.get("image") or "").strip()
+        if not image:
+            return None
+        name = str(args.get("name") or image.split("/")[-1].split(":")[0]).strip()
+        parts = ["docker", "run", "-d", "--name", _shell_quote(name)]
+        for port in args.get("ports") or []:
+            port = str(port).strip()
+            if port and all(ch.isdigit() or ch in ":/" for ch in port):
+                parts.extend(["-p", _shell_quote(port)])
+        for env in args.get("env") or []:
+            env = str(env).strip()
+            if env and "=" in env and "\n" not in env:
+                parts.extend(["-e", _shell_quote(env)])
+        for volume in args.get("volumes") or []:
+            volume = str(volume).strip()
+            if volume and ":" in volume and "\n" not in volume:
+                parts.extend(["-v", _shell_quote(volume)])
+        restart_policy = str(args.get("restart_policy") or "unless-stopped")
+        if restart_policy in {"no", "always", "on-failure", "unless-stopped"}:
+            parts.extend(["--restart", _shell_quote(restart_policy)])
+        parts.append(_shell_quote(image))
+        return " ".join(parts)
+    if command in {"container_start", "container_stop", "container_restart"}:
+        container = str(args.get("container_name") or "").strip()
+        if not container:
+            return None
+        action = command.replace("container_", "")
+        return f"docker {action} {_shell_quote(container)}"
+    if command == "container_remove":
+        container = str(args.get("container_name") or "").strip()
+        if not container:
+            return None
+        force = "-f " if args.get("force", True) else ""
+        return f"docker rm {force}{_shell_quote(container)}"
+    if command == "container_logs":
+        container = str(args.get("container_name") or "").strip()
+        return f"docker logs --tail 200 {_shell_quote(container)}" if container else None
+    if command == "container_inspect":
+        container = str(args.get("container_name") or "").strip()
+        return f"docker inspect {_shell_quote(container)}" if container else None
+    if command == "container_exec":
+        container = str(args.get("container_name") or "").strip()
+        exec_command = str(args.get("command") or "").strip()
+        shell = str(args.get("shell") or "/bin/sh")
+        if shell not in {"/bin/sh", "/bin/bash", "sh", "bash"}:
+            shell = "/bin/sh"
+        if not container or not exec_command:
+            return None
+        return f"docker exec {_shell_quote(container)} {_shell_quote(shell)} -lc {_shell_quote(exec_command)}"
+    if command == "container_list":
+        return "docker ps -a --format '{{json .}}'"
+    if command == "system_info":
+        return "uname -a; cat /etc/os-release 2>/dev/null || true; uptime; free -h; df -h /"
+    if command == "disk_usage":
+        return "df -h"
+    if command == "process_list":
+        return "ps aux"
+    if command == "service_status":
+        service = str(args.get("service_name") or "").strip()
+        return f"systemctl status {_shell_quote(service)} --no-pager" if service else None
+    if command == "service_restart":
+        service = str(args.get("service_name") or "").strip()
+        return f"systemctl restart {_shell_quote(service)}" if service else None
+    if command == "nginx_test_config":
+        return "nginx -t"
+    if command == "nginx_reload":
+        config = str(args.get("config_content") or "")
+        domain = str(args.get("domain") or "managed")
+        if config:
+            import base64
+
+            encoded = base64.b64encode(config.encode()).decode()
+            return (
+                "set -e; mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled; "
+                f"printf %s {_shell_quote(encoded)} | base64 -d > /etc/nginx/sites-available/{_shell_quote(domain)}.conf; "
+                f"ln -sf /etc/nginx/sites-available/{_shell_quote(domain)}.conf /etc/nginx/sites-enabled/{_shell_quote(domain)}.conf; "
+                "nginx -t; systemctl reload nginx"
+            )
+        return "nginx -t; systemctl reload nginx"
     return None
 
 
