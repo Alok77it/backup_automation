@@ -1,0 +1,93 @@
+# DevOps Control Plane — Docker Compose Extension
+# =================================================
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.devops.yml up -d
+#
+# This file:
+#   - Adds NEW services (devops-worker, devops-beat)
+#   - Extends existing services with new env vars (additive only)
+#   - Does NOT modify postgres, redis, api, worker, beat, frontend, nginx, prometheus
+#   - Does NOT remove any existing service, volume, or network
+#
+# IMPORTANT: The original docker-compose.yml MUST be included first.
+
+services:
+  # ── Extend existing API with devops env vars (additive) ────────────
+  api:
+    environment:
+      DEVOPS_EXTENSION_ENABLED: "true"
+      AGENT_DEFAULT_PORT: "9977"
+
+  # ── DevOps Celery workers (separate queues — no conflict) ──────────
+  devops-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    container_name: bi-devops-worker
+    restart: unless-stopped
+    command: >
+      celery -A app.workers.celery_devops worker
+      --loglevel=info
+      --queues=devops_low,devops_medium,devops_high
+      --concurrency=4
+      --hostname=devops-worker@%h
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-backupintel}:${POSTGRES_PASSWORD:-backupintel_secret}@postgres:5432/${POSTGRES_DB:-backup_intelligence}
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - bi-network
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.workers.celery_devops", "inspect", "ping"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+
+  # ── DevOps Beat scheduler (separate from existing beat) ────────────
+  devops-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    container_name: bi-devops-beat
+    restart: unless-stopped
+    command: >
+      celery -A app.workers.celery_devops beat
+      --loglevel=info
+      --schedule=/tmp/devops-beat.db
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-backupintel}:${POSTGRES_PASSWORD:-backupintel_secret}@postgres:5432/${POSTGRES_DB:-backup_intelligence}
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      - redis
+      - devops-worker
+    networks:
+      - bi-network
+
+  # ── DevOps migration (run once before devops-worker starts) ────────
+  devops-migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bi-devops-migrate
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-backupintel}:${POSTGRES_PASSWORD:-backupintel_secret}@postgres:5432/${POSTGRES_DB:-backup_intelligence}
+    command: alembic upgrade 005_devops_control_plane
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bi-network
+    profiles:
+      - devops-migrate
+
+# ── No new volumes needed — existing postgres_data and redis_data used
+# ── No new networks — reuses existing bi-network

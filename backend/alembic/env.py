@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.core.config import get_settings
 from app.core.database import Base
 from app.models import entities  # noqa: F401
+from app.models import devops_entities  # noqa: F401 — register DevOps tables in metadata
 
 config = context.config
 settings = get_settings()

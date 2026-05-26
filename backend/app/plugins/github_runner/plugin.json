@@ -1,0 +1,50 @@
+{
+  "id": "github_runner",
+  "name": "GitHub Actions Runner",
+  "description": "Register a self-hosted GitHub Actions runner on this server via Docker.",
+  "version": "2.317.0",
+  "category": "ci_cd",
+  "icon_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+  "docs_url": "https://docs.github.com/en/actions/hosting-your-own-runners",
+  "requires_docker": true,
+  "min_memory_mb": 2048,
+  "supported_os": ["ubuntu", "debian", "centos", "rhel", "amzn"],
+  "risk_level": "high",
+  "install_env": ["GITHUB_TOKEN", "GITHUB_RUNNER_URL"],
+  "config_schema": {
+    "type": "object",
+    "required": ["github_token", "github_owner", "github_repo"],
+    "properties": {
+      "github_token": {
+        "type": "string",
+        "secret": true,
+        "description": "GitHub PAT with repo/admin:org scope"
+      },
+      "github_owner": {
+        "type": "string",
+        "description": "GitHub org or user name"
+      },
+      "github_repo": {
+        "type": "string",
+        "description": "Repository name (leave empty for org-level runner)"
+      },
+      "runner_name": {
+        "type": "string",
+        "description": "Display name for this runner"
+      },
+      "runner_labels": {
+        "type": "string",
+        "default": "self-hosted,linux,x64"
+      },
+      "runner_group": {
+        "type": "string",
+        "default": "Default"
+      },
+      "runner_count": {
+        "type": "integer",
+        "default": 1,
+        "description": "Number of runner containers to start"
+      }
+    }
+  }
+}

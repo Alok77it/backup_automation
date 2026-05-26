@@ -1,0 +1,23 @@
+{
+  "id": "jenkins",
+  "name": "Jenkins CI/CD",
+  "description": "Deploy Jenkins — the leading open-source automation server — via Docker.",
+  "version": "2.452",
+  "category": "ci_cd",
+  "icon_url": "https://www.jenkins.io/images/logos/jenkins/jenkins.png",
+  "docs_url": "https://www.jenkins.io/doc/book/installing/docker/",
+  "requires_docker": true,
+  "min_memory_mb": 2048,
+  "supported_os": ["ubuntu", "debian", "centos", "rhel", "amzn"],
+  "risk_level": "high",
+  "install_env": ["JENKINS_ADMIN_PASSWORD"],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "jenkins_port": { "type": "integer", "default": 8080 },
+      "jenkins_agent_port": { "type": "integer", "default": 50000 },
+      "jenkins_home": { "type": "string", "default": "/opt/jenkins/data" },
+      "java_opts": { "type": "string", "default": "-Xmx2g -Xms512m" }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "id": "n8n",
+  "name": "n8n Workflow Automation",
+  "description": "Deploy n8n — the open-source workflow automation platform — via Docker Compose with optional SSL reverse proxy.",
+  "version": "1.30.0",
+  "category": "workflow",
+  "icon_url": "https://n8n.io/favicon.ico",
+  "docs_url": "https://docs.n8n.io/hosting/installation/docker/",
+  "requires_docker": true,
+  "min_memory_mb": 1024,
+  "supported_os": ["ubuntu", "debian", "centos", "rhel", "amzn"],
+  "risk_level": "high",
+  "install_env": ["N8N_BASIC_AUTH_PASSWORD", "N8N_ENCRYPTION_KEY"],
+  "config_schema": {
+    "type": "object",
+    "required": ["n8n_host", "n8n_port"],
+    "properties": {
+      "n8n_host": {
+        "type": "string",
+        "description": "Domain or IP for n8n (e.g. n8n.example.com)"
+      },
+      "n8n_port": {
+        "type": "integer",
+        "default": 5678
+      },
+      "n8n_basic_auth_active": {
+        "type": "boolean",
+        "default": true
+      },
+      "n8n_basic_auth_user": {
+        "type": "string",
+        "default": "admin"
+      },
+      "n8n_basic_auth_password": {
+        "type": "string",
+        "secret": true
+      },
+      "n8n_encryption_key": {
+        "type": "string",
+        "secret": true,
+        "description": "AES encryption key for stored credentials"
+      },
+      "timezone": {
+        "type": "string",
+        "default": "UTC"
+      },
+      "install_path": {
+        "type": "string",
+        "default": "/opt/n8n"
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "kubernetes",
+  "name": "Kubernetes (k3s)",
+  "description": "Install lightweight k3s Kubernetes on this server for container orchestration.",
+  "version": "1.29.0",
+  "category": "tool",
+  "icon_url": "https://kubernetes.io/images/favicon.png",
+  "docs_url": "https://k3s.io/",
+  "requires_docker": false,
+  "min_memory_mb": 2048,
+  "supported_os": ["ubuntu", "debian", "centos", "rhel", "amzn"],
+  "risk_level": "high",
+  "install_env": [],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "k3s_version": { "type": "string", "default": "latest" },
+      "disable_traefik": { "type": "boolean", "default": false },
+      "disable_servicelb": { "type": "boolean", "default": false },
+      "node_role": { "type": "string", "enum": ["server", "agent"], "default": "server" },
+      "server_url": { "type": "string", "description": "For agent nodes: the k3s server URL" },
+      "node_token": { "type": "string", "secret": true, "description": "For agent nodes: join token" }
+    }
+  }
+}

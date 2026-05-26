@@ -1,0 +1,28 @@
+{
+  "id": "docker",
+  "name": "Docker Engine",
+  "description": "Install Docker Engine + Docker Compose on the target server. Required by most other plugins.",
+  "version": "25.0.0",
+  "category": "tool",
+  "icon_url": "https://www.docker.com/wp-content/uploads/2022/03/Moby-logo.png",
+  "docs_url": "https://docs.docker.com/engine/install/",
+  "requires_docker": false,
+  "min_memory_mb": 256,
+  "supported_os": ["ubuntu", "debian", "centos", "rhel", "fedora", "amzn"],
+  "risk_level": "high",
+  "install_env": [],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "docker_version": {
+        "type": "string",
+        "default": "latest",
+        "description": "Docker version to install (e.g. '25.0.0' or 'latest')"
+      },
+      "add_current_user_to_docker_group": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  }
+}

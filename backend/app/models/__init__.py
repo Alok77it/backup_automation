@@ -1,3 +1,6 @@
+# DevOps Control Plane — imported so Alembic autogenerate sees all new tables
+from app.models import devops_entities as devops_entities  # noqa: F401
+
 from app.models.entities import (
     AIConversation,
     AIConversationMessage,

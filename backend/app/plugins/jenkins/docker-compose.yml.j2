@@ -1,0 +1,31 @@
+version: "3.8"
+services:
+  jenkins:
+    image: jenkins/jenkins:lts-jdk21
+    container_name: jenkins
+    restart: unless-stopped
+    privileged: true
+    user: root
+    ports:
+      - "{{ jenkins_port | default(8080) }}:8080"
+      - "{{ jenkins_agent_port | default(50000) }}:50000"
+    environment:
+      - JAVA_OPTS={{ java_opts | default('-Xmx2g -Xms512m') }}
+      - JENKINS_OPTS=--httpPort=8080
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+volumes:
+  jenkins_home:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: {{ jenkins_home | default('/opt/jenkins/data') }}

@@ -81,6 +81,11 @@ app.include_router(storage.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(selfmonitor.router, prefix="/api")
 
+# ── DevOps Control Plane extension (additive only — no existing code modified) ──
+from app.app_extension import register_devops_extension  # noqa: E402
+register_devops_extension(app)
+# ────────────────────────────────────────────────────────────────────────────────
+
 
 @app.get("/api/health")
 async def health_check():

@@ -1,0 +1,28 @@
+version: "3.8"
+# GitHub Actions self-hosted runner
+# Managed by DevOps Control Plane
+services:
+{% for i in range(runner_count | default(1) | int) %}
+  runner-{{ i + 1 }}:
+    image: myoung34/github-runner:latest
+    container_name: github-runner-{{ i + 1 }}
+    restart: unless-stopped
+    environment:
+      - RUNNER_NAME={{ runner_name | default('devops-runner') }}-{{ i + 1 }}
+      - RUNNER_LABELS={{ runner_labels | default('self-hosted,linux,x64') }}
+      - RUNNER_GROUP={{ runner_group | default('Default') }}
+      - GITHUB_TOKEN={{ github_token }}
+      - REPO_URL=https://github.com/{{ github_owner }}/{{ github_repo }}
+      - EPHEMERAL=false
+      - DISABLE_AUTO_UPDATE=false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - runner_{{ i + 1 }}_work:/home/runner/_work
+    security_opt:
+      - no-new-privileges:true
+{% endfor %}
+
+volumes:
+{% for i in range(runner_count | default(1) | int) %}
+  runner_{{ i + 1 }}_work:
+{% endfor %}
