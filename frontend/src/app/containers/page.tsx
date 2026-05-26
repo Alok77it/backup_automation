@@ -533,7 +533,9 @@ export default function ContainersPage() {
           </div>
         )}
 
-="flex items-center gap-2 text-base">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
               <Server className="h-4 w-4" /> Server &amp; Credentials
             </CardTitle>
           </CardHeader>
@@ -659,113 +661,6 @@ export default function ContainersPage() {
                   </div>
 
                   <Button className="w-full" disabled={!selectedServer || !agentCredentialId}>
-                    <Plus className="h-4 w-4 mr-2" /> Create Container
-                  </Button>
-                </form>
-              ) : (
-                <form onSubmit={submitCompose} className="space-y-3">
-                  <Input placeholder="Project name" value={composeForm.project_name} onChange={(e) => setComposeForm({ ...composeForm, project_name: e.target.value })} />
-                  <Textarea className="min-h-64 font-mono text-xs" value={composeForm.compose_content} onChange={(e) => setComposeForm({ ...composeForm, compose_content: e.target.value })} />
-                  <Button disabled={!selectedServer || !agentCredentialId}>
-                    <FileCode2 className="h-4 w-4 mr-2" /> Deploy Compose
-                  </Button>
-                </form>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Summary tiles */}
-        {summary && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-            {summaryEntries.map(([label, value]) => {
-              const cfg = STATE_CONFIG[label];
-              const active = stateFilter === label || (label === "total" && !stateFilter);
-              return (
-                <button
-                  key={label}
-                  onClick={() => setStateFilter(label === "total" ? null : label)}
-                  className={`rounded-xl border bg-white p-3 text-left transition hover:border-primary hover:shadow-sm ${
-                    active ? "border-primary ring-1 ring-primary/20 bg-primary/5" : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    {cfg && <span className={`h-2 w-2 rounded-full shrink-0 ${cfg.dot}`} />}
-                    <span className="text-xs capitalize text-muted-foreground">{label}</span>
-                  </div>
-                  <div className="text-2xl font-bold">{value}</div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Container history table */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Container className="h-5 w-5" />
-                Container History
-                <span className="font-normal text-sm text-muted-foreground">
-                  ({filtered.length}{stateFilter ? ` ${stateFilter}` : ""})
-                  {selectedServer && servers.find((s) => s.id === selectedServer) && (
-                    <span className="ml-1 text-xs">· {servers.find((s) => s.id === selectedServer)!.name}</span>
-                  )}
-                </span>
-              </CardTitle>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Input placeholder="Search name, image, container ID…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs h-8 text-sm" />
-                {stateFilter && <Button variant="outline" size="sm" onClick={() => setStateFilter(null)}>Clear filter</Button>}
-                <Button variant="outline" size="sm" onClick={loadData}><RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh</Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="flex items-center justify-center py-16 gap-3 text-sm text-muted-foreground">
-                <RefreshCw className="h-4 w-4 animate-spin" /> Loading containers…
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="py-14 text-center space-y-2">
-                <Container className="h-9 w-9 mx-auto text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground">No containers found{stateFilter ? ` with state "${stateFilter}"` : ""}.</p>
-                <p className="text-xs text-muted-foreground">Select a server and ensure the agent is running, then refresh.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/20 text-left text-xs text-muted-foreground">
-                      <th className="pb-2 pt-3 pl-3 pr-1 w-6" />
-                      <th className="pb-2 pt-3 pr-4">Name / Short ID</th>
-                      <th className="pb-2 pt-3 pr-4">Image</th>
-                      <th className="pb-2 pt-3 pr-4">State</th>
-                      <th className="pb-2 pt-3 pr-4"><div className="flex items-center gap-1"><Cpu className="h-3 w-3" /> CPU</div></th>
-                      <th className="pb-2 pt-3 pr-4">Memory</th>
-                      <th className="pb-2 pt-3 pr-4"><div className="flex items-center gap-1"><Clock className="h-3 w-3" /> Last Seen</div></th>
-                      <th className="pb-2 pt-3 pr-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((c) => (
-                      <ContainerRow key={c.id} c={c} onAction={(action) => runAction(action, c)} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <p className="text-xs text-center text-muted-foreground">
-          Click any row to expand full details — container ID, port mappings, exit code, and timestamps.
-          All states (running, stopped, exited, dead) are shown. Data refreshes with each agent snapshot cycle.
-        </p>
-      </div>
-    </DashboardLayout>
-  );
-}
                     <Plus className="h-4 w-4 mr-2" /> Create Container
                   </Button>
                 </form>

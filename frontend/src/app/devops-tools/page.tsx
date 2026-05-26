@@ -1227,3 +1227,155 @@ echo "[PKG] Done."`;
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
+type TabId = "install" | "installed" | "github" | "packages" | "credentials";
+
+export default function DevOpsToolsPage() {
+  const [servers, setServers] = useState<ServerType[]>([]);
+  const [credentials, setCredentials] = useState<StoredCredential[]>([]);
+  const [installations, setInstallations] = useState<PluginInstallation[]>([]);
+  const [activeTab, setActiveTab] = useState<TabId>("install");
+  const [filterServer, setFilterServer] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  async function loadAll() {
+    try {
+      const [srvData, crdData, instData] = await Promise.all([
+        api("/servers"),
+        api("/devops-tools/credentials"),
+        api("/plugins/installations"),
+      ]);
+      setServers(Array.isArray(srvData) ? srvData : (srvData.items ?? []));
+      setCredentials(Array.isArray(crdData) ? crdData : (crdData.items ?? []));
+      setInstallations(Array.isArray(instData) ? instData : (instData.items ?? []));
+    } catch {
+      // errors surface per-component
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadAll(); }, []);
+
+  const TABS: { id: TabId; label: string; icon: string }[] = [
+    { id: "install",     label: "Install Tool",  icon: "🔧" },
+    { id: "installed",   label: "Installed",      icon: "✅" },
+    { id: "github",      label: "GitHub Runs",    icon: "🐙" },
+    { id: "packages",    label: "Packages",       icon: "📦" },
+    { id: "credentials", label: "Credentials",    icon: "🔑" },
+  ];
+
+  return (
+    <DashboardLayout title="DevOps Tools">
+      <div className="space-y-6 p-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-3xl font-bold">DevOps Tools</h1>
+          <p className="text-muted-foreground mt-1">
+            Install CI/CD tools, manage credentials, and run automation scripts on your servers.
+          </p>
+        </div>
+
+        {/* Tab bar */}
+        <div className="flex gap-0 border-b overflow-x-auto">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                activeTab === t.id
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span>{t.icon}</span> {t.label}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 text-muted-foreground py-16">
+            <Loader2 className="h-5 w-5 animate-spin" /> Loading…
+          </div>
+        ) : (
+          <>
+            {activeTab === "install" && (
+              <InstallWizard
+                servers={servers}
+                installations={installations}
+                credentials={credentials}
+                onDone={loadAll}
+                onCredentialSaved={(cred) =>
+                  setCredentials((prev) => [...prev, cred])
+                }
+              />
+            )}
+
+            {activeTab === "installed" && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <SelectField
+                    label="Filter by server"
+                    value={filterServer}
+                    onChange={(e) => setFilterServer(e.target.value)}
+                  >
+                    <option value="">All servers</option>
+                    {servers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </SelectField>
+                </div>
+                {installations.filter((i) =>
+                  !filterServer || i.server_id === filterServer
+                ).length === 0 ? (
+                  <div className="text-center py-16 text-muted-foreground text-sm">
+                    No tools installed yet. Use the <strong>Install Tool</strong> tab to get started.
+                  </div>
+                ) : (
+                  <InstallationsPanel
+                    installations={installations}
+                    servers={servers}
+                    filterServerId={filterServer}
+                  />
+                )}
+              </div>
+            )}
+
+            {activeTab === "github" && (
+              <RunGithubPanel servers={servers} credentials={credentials} />
+            )}
+
+            {activeTab === "packages" && (
+              <PackagesPanel servers={servers} credentials={credentials} />
+            )}
+
+            {activeTab === "credentials" && (
+              <CredentialManager
+                credentials={credentials}
+                servers={servers}
+                onSaved={(cred) =>
+                  setCredentials((prev) => {
+                    const idx = prev.findIndex((c) => c.id === cred.id);
+                    if (idx >= 0) {
+                      const next = [...prev];
+                      next[idx] = cred;
+                      return next;
+                    }
+                    return [...prev, cred];
+                  })
+                }
+                onDeleted={(id) =>
+                  setCredentials((prev) => prev.filter((c) => c.id !== id))
+                }
+              />
+            )}
+          </>
+        )}
+      </div>
+    </DashboardLayout>
+  );
+}
