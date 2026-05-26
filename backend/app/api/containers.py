@@ -38,8 +38,8 @@ class ContainerSnapshotOut(BaseModel):
     state: str
     status: str | None
     exit_code: int | None
-    ports: dict | None
-    labels: dict | None
+    ports: dict | str | list[object] | None
+    labels: dict | str | list[object] | None
     cpu_percent: float | None
     memory_mb: float | None
     memory_limit_mb: float | None

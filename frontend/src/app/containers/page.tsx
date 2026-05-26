@@ -38,7 +38,7 @@ interface ContainerSnapshot {
   state: string;
   status: string | null;
   exit_code: number | null;
-  ports: Record<string, unknown> | string | null;
+  ports: Record<string, unknown> | string | unknown[] | null;
   cpu_percent: number | null;
   memory_mb: number | null;
   memory_limit_mb: number | null;

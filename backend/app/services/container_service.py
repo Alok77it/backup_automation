@@ -10,6 +10,7 @@ ADDITIVE — no changes to backup/monitoring modules.
 from __future__ import annotations
 
 import logging
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -124,33 +125,77 @@ class ContainerService:
         cpu = stats.get("cpu_percent") or raw.get("cpu_percent")
         mem = stats.get("memory_mb") or raw.get("memory_mb")
         mem_limit = stats.get("memory_limit_mb") or raw.get("memory_limit_mb")
+        state_details = raw.get("State") if isinstance(raw.get("State"), dict) else {}
 
         return ContainerSnapshot(
             organization_id=organization_id,
             server_id=server_id,
-            container_id=raw.get("Id") or raw.get("id") or "",
+            container_id=raw.get("Id") or raw.get("ID") or raw.get("id") or "",
             name=name,
             image=raw.get("Image") or raw.get("image") or "",
             image_tag=raw.get("ImageTag") or raw.get("image_tag"),
             state=state,
             status=raw.get("Status") or raw.get("status"),
-            exit_code=raw.get("ExitCode") or raw.get("exit_code"),
-            ports=raw.get("Ports") or raw.get("ports"),
-            labels=raw.get("Labels") or raw.get("labels"),
-            networks=raw.get("Networks") or raw.get("networks"),
-            mounts=raw.get("Mounts") or raw.get("mounts"),
+            exit_code=_int_or_none(raw.get("ExitCode") or raw.get("exit_code")),
+            ports=_json_object(raw.get("Ports") or raw.get("ports")),
+            labels=_json_object(raw.get("Labels") or raw.get("labels")),
+            networks=_json_list(raw.get("Networks") or raw.get("networks")),
+            mounts=_json_list(raw.get("Mounts") or raw.get("mounts")),
             cpu_percent=float(cpu) if cpu is not None else None,
             memory_mb=float(mem) if mem is not None else None,
             memory_limit_mb=float(mem_limit) if mem_limit is not None else None,
-            created_in_docker=_parse_dt(raw.get("Created") or raw.get("created")),
-            started_at=_parse_dt(
-                (raw.get("State") if isinstance(raw.get("State"), dict) else {}).get("StartedAt")
-            ),
-            finished_at=_parse_dt(
-                (raw.get("State") if isinstance(raw.get("State"), dict) else {}).get("FinishedAt")
-            ),
+            created_in_docker=_parse_dt(raw.get("CreatedAt") or raw.get("Created") or raw.get("created")),
+            started_at=_parse_dt(state_details.get("StartedAt")),
+            finished_at=_parse_dt(state_details.get("FinishedAt")),
             captured_at=datetime.now(timezone.utc),
         )
+
+
+def _json_object(value: object) -> dict | None:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, list):
+        return {"items": value}
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        return {"raw": text}
+    if isinstance(parsed, dict):
+        return parsed
+    return {"raw": parsed}
+
+
+def _json_list(value: object) -> list | None:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        return [value]
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        return [{"raw": text}]
+    if isinstance(parsed, list):
+        return parsed
+    return [parsed]
+
+
+def _int_or_none(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _parse_dt(value: str | int | None) -> datetime | None:
