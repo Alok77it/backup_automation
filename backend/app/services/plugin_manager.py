@@ -161,8 +161,7 @@ class PluginManager:
         ip_address: str | None = None,
     ) -> PluginInstallation:
         """
-        Create a PluginInstallation record and submit a HIGH-risk DevOpsJob
-        (routed through the approval system automatically).
+        Create a PluginInstallation record. The caller submits the execution job.
         Returns the installation record — job is created separately by the caller
         via ExecutionEngine.submit_job().
         """
@@ -206,7 +205,7 @@ class PluginManager:
             resource_id=plugin_id,
             details={"config_keys": list((config or {}).keys())},
             ip_address=ip_address,
-            risk_level="high",
+            risk_level="medium",
         )
         db.add(audit)
 

@@ -2,7 +2,7 @@
 Plugin System API Router
 =========================
 Browse the plugin catalog, install/uninstall tools on servers.
-All install operations create HIGH-risk DevOpsJobs (-> approval required).
+Install operations are queued directly; unrelated destructive operations can still use approvals.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
 from app.core.security import decrypt_secret
-from app.models.entities import OrganizationMember
+from app.models.entities import OrganizationMember, Server
 from app.models.devops_entities import DevOpsPlugin, PluginInstallation, PluginStatus, RiskLevel, StoredCredential
 from app.services.execution_engine import execution_engine
 from app.services.plugin_manager import (
@@ -153,19 +153,27 @@ async def install_plugin(
         Depends(require_permission("server:write"))
     ],
 ):
-    """Request plugin installation. Creates a HIGH-risk job (approval required)."""
+    """Request plugin installation."""
     try:
+        config = dict(body.config or {})
+        server = await db.get(Server, body.server_id)
+        server_host = server.hostname if server else None
+        config.setdefault("public_ip", config.get("public_ip") or server_host)
+        config.setdefault("server_hostname", config.get("server_hostname") or server_host)
+        if plugin_id == "n8n":
+            config.setdefault("n8n_host", config.get("public_ip") or server_host)
+            config.setdefault("ssl_enabled", False)
+            config.setdefault("n8n_basic_auth_active", bool(config.get("n8n_basic_auth_password")))
         install = await plugin_manager.request_install(
             db,
             organization_id=membership.organization_id,
             server_id=body.server_id,
             plugin_id=plugin_id,
-            config=body.config,
+            config=config,
             installed_by=membership.user_id,
             ip_address=request.client.host if request.client else None,
         )
 
-        config = body.config or {}
         agent_token = body.agent_token_raw
         if not agent_token and body.agent_credential_id:
             _, agent_token = await _credential_secret(
@@ -213,11 +221,11 @@ async def install_plugin(
 
         access_url = None
         if plugin_id == "n8n":
-            host = config.get("n8n_host") or config.get("public_ip")
+            host = config.get("n8n_host") or config.get("public_ip") or server_host
             port = config.get("n8n_port", 5678)
             access_url = f"http://{host}:{port}" if host else None
         elif plugin_id == "jenkins":
-            host = config.get("public_ip")
+            host = config.get("public_ip") or server_host
             port = config.get("jenkins_port", 8080)
             access_url = f"http://{host}:{port}" if host else None
 
@@ -244,7 +252,7 @@ async def install_plugin(
             job_type="plugin_install",
             plugin_id=plugin_id,
             payload=payload,
-            risk_level=RiskLevel.HIGH,
+            risk_level=RiskLevel.MEDIUM,
             timeout_seconds=600,
             ip_address=request.client.host if request.client else None,
         )

@@ -88,6 +88,9 @@ COMMAND_DEFINITIONS: dict[str, dict] = {
         "cmd": ["docker", "logs", "--tail", "100"],
         "allowed_args": ["container_name"],
     },
+    "container_exec": {
+        "handler": "container_exec",
+    },
     "container_restart": {
         "cmd": ["docker", "restart"],
         "allowed_args": ["container_name"],
@@ -283,6 +286,9 @@ async def _dispatch(command: str, args: dict, timeout: int) -> tuple[Any, int]:
 
     if handler == "container_remove":
         return await _container_remove(args, timeout), 0
+
+    if handler == "container_exec":
+        return await _container_exec(args, timeout), 0
 
     if handler == "package_install":
         return await _package_install(args, timeout), 0
@@ -488,6 +494,19 @@ async def _container_remove(args: dict, timeout: int) -> str:
         cmd.append("-f")
     cmd.append(name)
     return await _run_subprocess(cmd, timeout)
+
+
+async def _container_exec(args: dict, timeout: int) -> str:
+    name = _safe_name(args.get("container_name") or args.get("name"))
+    command = str(args.get("command") or "").strip()
+    shell = str(args.get("shell") or "/bin/sh").strip()
+    if shell not in {"/bin/sh", "/bin/bash", "sh", "bash"}:
+        shell = "/bin/sh"
+    if not command:
+        return "No command provided"
+    if len(command) > 4000:
+        raise ValueError("Command is too long")
+    return await _run_subprocess(["docker", "exec", name, shell, "-lc", command], timeout)
 
 
 async def _package_install(args: dict, timeout: int) -> str:

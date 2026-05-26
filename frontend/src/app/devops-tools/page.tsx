@@ -605,7 +605,7 @@ function InstallWizard({
           config: finalConfig,
         }),
       });
-      setSuccess(`${selectedTool!.name} install submitted. Approve high-risk installs in AI Intelligence.`);
+      setSuccess(`${selectedTool!.name} install submitted. It will run directly without approval.`);
       setTimeout(() => { onDone(); setStep("tool"); setSelectedTool(null); }, 1500);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Install failed");
@@ -930,6 +930,14 @@ function InstallationsPanel({ installations, servers, filterServerId }: { instal
     return <Package className="h-4 w-4 text-muted-foreground" />;
   };
 
+  const fallbackAccessUrl = (inst: PluginInstallation) => {
+    const srv = servers.find((s) => s.id === inst.server_id);
+    if (!srv?.hostname) return null;
+    if (inst.plugin_id === "jenkins") return `http://${srv.hostname}:8080`;
+    if (inst.plugin_id === "n8n") return `http://${srv.hostname}:5678`;
+    return null;
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -942,6 +950,7 @@ function InstallationsPanel({ installations, servers, filterServerId }: { instal
           {visible.map((inst) => {
             const tool = TOOLS.find((t) => t.id === inst.plugin_id);
             const srv = servers.find((s) => s.id === inst.server_id);
+            const accessUrl = inst.access_url || fallbackAccessUrl(inst);
             return (
               <div key={inst.id} className="flex items-center justify-between py-3 gap-3">
                 <div className="flex items-center gap-3">
@@ -955,8 +964,8 @@ function InstallationsPanel({ installations, servers, filterServerId }: { instal
                   {statusIcon(inst.status)}
                   <Badge variant="secondary" className="text-xs capitalize">{inst.status}</Badge>
                   {inst.health_status && <Badge variant="outline" className="text-xs">{inst.health_status}</Badge>}
-                  {inst.access_url && (
-                    <a href={inst.access_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                  {accessUrl && (
+                    <a href={accessUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                       Open <ExternalLink className="h-3 w-3" />
                     </a>
                   )}
@@ -1155,46 +1164,24 @@ function PackagesPanel({ servers, credentials }: { servers: ServerType[]; creden
 
   async function install() {
     setError(""); setSuccess(""); setRunning(true);
-    const pkgList = packages.split(/[\s,]+/).filter(Boolean).join(" ");
-    // OS-aware install script — auto-detects apt (Debian/Ubuntu) vs dnf/yum (Fedora/RHEL/CentOS/Amazon)
-    const script = `#!/bin/bash
-set -euo pipefail
-OS_ID=""
-if [ -f /etc/os-release ]; then . /etc/os-release; OS_ID="\${ID:-}"; fi
-echo "[PKG] OS: \$OS_ID  Packages: ${pkgList}"
-case "\$OS_ID" in
-  ubuntu|debian)
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq && apt-get install -y -qq ${pkgList} ;;
-  fedora)
-    dnf install -y ${pkgList} ;;
-  centos|rhel|rocky|almalinux|amzn)
-    yum install -y ${pkgList} ;;
-  *)
-    if command -v apt-get &>/dev/null; then
-      apt-get update -qq && apt-get install -y -qq ${pkgList}
-    elif command -v dnf &>/dev/null; then dnf install -y ${pkgList}
-    elif command -v yum &>/dev/null; then yum install -y ${pkgList}
-    else echo "[PKG] ERROR: no package manager found" >&2; exit 1; fi ;;
-esac
-echo "[PKG] Done."`;
+    const pkgItems = packages.split(/[\s,]+/).filter(Boolean);
+    const pkgList = pkgItems.join(" ");
     try {
       await api("/execution/jobs", {
         method: "POST",
         body: JSON.stringify({
           server_id: serverId,
           job_type: "agent_command",
-          risk_level: "high",
+          risk_level: "medium",
           timeout_seconds: 900,
           payload: {
-            command: "script_run_approved",
-            _agent_token_raw: null,
+            command: "package_install",
             agent_credential_id: agentCredId,
-            args: { script_content: script },
+            args: { packages: pkgItems },
           },
         }),
       });
-      setSuccess(`Install job submitted for: ${pkgList}. Works on Debian, Ubuntu, Fedora, RHEL, CentOS. Check Logs → Job Logs for output.`);
+      setSuccess(`Install job submitted for: ${pkgList}. It will run directly without approval. Check Logs → Job Logs for output.`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Install failed");
     } finally {

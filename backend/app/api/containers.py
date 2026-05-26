@@ -18,7 +18,8 @@ from sqlalchemy import select
 from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
 from app.core.security import decrypt_secret
 from app.models.devops_entities import RiskLevel, StoredCredential
-from app.models.entities import OrganizationMember
+from app.models.entities import OrganizationMember, Server
+from app.services.agent_comm import agent_comm
 from app.services.container_service import container_service
 from app.services.execution_engine import execution_engine
 
@@ -87,6 +88,17 @@ class ContainerActionRequest(AgentActionRequest):
     server_id: uuid.UUID
     container_name: str
     force: bool = True
+
+
+class ContainerReadRequest(AgentActionRequest):
+    server_id: uuid.UUID
+    container_name: str
+
+
+class ContainerExecRequest(ContainerReadRequest):
+    command: str
+    shell: str = "/bin/sh"
+    timeout_seconds: int = 60
 
 
 async def _credential_secret(
@@ -300,7 +312,7 @@ async def compose_up(
             "_agent_token_raw": token,
             "agent_port": body.agent_port,
         },
-        risk_level=RiskLevel.HIGH,
+        risk_level=RiskLevel.MEDIUM,
         timeout_seconds=900,
     )
 
@@ -335,6 +347,91 @@ async def container_action(
             "_agent_token_raw": token,
             "agent_port": body.agent_port,
         },
-        risk_level=RiskLevel.MEDIUM if action != "delete" else RiskLevel.HIGH,
+        risk_level=RiskLevel.MEDIUM,
         timeout_seconds=300,
+    )
+
+
+async def _run_container_command_now(
+    *,
+    db: DbSession,
+    membership: OrganizationMember,
+    body: AgentActionRequest,
+    server_id: uuid.UUID,
+    command: str,
+    args: dict,
+    timeout_seconds: int = 60,
+):
+    server = await db.get(Server, server_id)
+    if not server or server.organization_id != membership.organization_id:
+        raise HTTPException(status_code=404, detail="Server not found")
+    token = await _resolve_agent_token(db, membership, body)
+    response = await agent_comm.execute(
+        server_hostname=server.hostname,
+        server_port=body.agent_port,
+        agent_token_raw=token,
+        command=command,
+        args=args,
+        timeout_seconds=timeout_seconds,
+    )
+    return {
+        "success": response.success,
+        "exit_code": response.exit_code,
+        "output": response.output,
+        "duration_ms": response.duration_ms,
+    }
+
+
+@router.post("/inspect", dependencies=[Depends(verify_csrf)])
+async def inspect_container(
+    body: ContainerReadRequest,
+    db: DbSession,
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:read"))],
+):
+    return await _run_container_command_now(
+        db=db,
+        membership=membership,
+        body=body,
+        server_id=body.server_id,
+        command="container_inspect",
+        args={"container_name": body.container_name},
+        timeout_seconds=60,
+    )
+
+
+@router.post("/logs", dependencies=[Depends(verify_csrf)])
+async def container_logs(
+    body: ContainerReadRequest,
+    db: DbSession,
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:read"))],
+):
+    return await _run_container_command_now(
+        db=db,
+        membership=membership,
+        body=body,
+        server_id=body.server_id,
+        command="container_logs",
+        args={"container_name": body.container_name},
+        timeout_seconds=60,
+    )
+
+
+@router.post("/exec", dependencies=[Depends(verify_csrf)])
+async def exec_container(
+    body: ContainerExecRequest,
+    db: DbSession,
+    membership: Annotated[OrganizationMember, Depends(require_permission("server:write"))],
+):
+    return await _run_container_command_now(
+        db=db,
+        membership=membership,
+        body=body,
+        server_id=body.server_id,
+        command="container_exec",
+        args={
+            "container_name": body.container_name,
+            "command": body.command,
+            "shell": body.shell,
+        },
+        timeout_seconds=body.timeout_seconds,
     )

@@ -14,6 +14,10 @@ import {
   Clock,
   Cpu,
   Server,
+  Terminal,
+  ScrollText,
+  Pencil,
+  ExternalLink,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +38,7 @@ interface ContainerSnapshot {
   state: string;
   status: string | null;
   exit_code: number | null;
-  ports: Record<string, unknown> | null;
+  ports: Record<string, unknown> | string | null;
   cpu_percent: number | null;
   memory_mb: number | null;
   memory_limit_mb: number | null;
@@ -51,6 +55,13 @@ interface ContainerSummary {
   dead: number;
   paused: number;
   restarting: number;
+}
+
+interface CommandResult {
+  success: boolean;
+  exit_code: number;
+  output: unknown;
+  duration_ms: number;
 }
 
 interface StoredCredential {
@@ -109,9 +120,13 @@ function uptime(startedAt: string | null) {
 function ContainerRow({
   c,
   onAction,
+  onRead,
+  onEdit,
 }: {
   c: ContainerSnapshot;
   onAction: (action: "start" | "stop" | "restart" | "delete") => void;
+  onRead: (action: "logs" | "inspect" | "shell", c: ContainerSnapshot) => void;
+  onEdit: (c: ContainerSnapshot) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const cfg = STATE_CONFIG[c.state] ?? { variant: "outline" as const, dot: "bg-slate-400" };
@@ -192,6 +207,15 @@ function ContainerRow({
             <Button variant="ghost" size="icon" title="Restart" onClick={() => onAction("restart")}>
               <RefreshCw className="h-3 w-3" />
             </Button>
+            <Button variant="ghost" size="icon" title="Logs" onClick={() => onRead("logs", c)}>
+              <ScrollText className="h-3 w-3" />
+            </Button>
+            <Button variant="ghost" size="icon" title="Shell" onClick={() => onRead("shell", c)}>
+              <Terminal className="h-3 w-3" />
+            </Button>
+            <Button variant="ghost" size="icon" title="Edit" onClick={() => onEdit(c)}>
+              <Pencil className="h-3 w-3" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -248,6 +272,11 @@ function ContainerRow({
                   <div className="font-mono">{JSON.stringify(c.ports)}</div>
                 </div>
               )}
+              <div className="col-span-2">
+                <button className="text-primary hover:underline" onClick={() => onRead("inspect", c)}>
+                  Inspect full runtime config
+                </button>
+              </div>
               {c.status && (
                 <div className="col-span-2">
                   <div className="text-muted-foreground font-medium mb-0.5">Docker Status String</div>
@@ -281,6 +310,11 @@ export default function ContainersPage() {
   const [mode, setMode] = useState<"image" | "compose">("image");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [consoleTitle, setConsoleTitle] = useState("");
+  const [consoleOutput, setConsoleOutput] = useState("");
+  const [shellCommand, setShellCommand] = useState("whoami && pwd");
+  const [activeContainer, setActiveContainer] = useState<ContainerSnapshot | null>(null);
+  const [consoleLoading, setConsoleLoading] = useState(false);
 
   // Docker detection
   const [dockerMissing, setDockerMissing] = useState(false);
@@ -427,13 +461,68 @@ export default function ContainersPage() {
           config: {},
         }),
       });
-      setMessage("Docker install job submitted — it is HIGH risk and needs approval in AI Intelligence → Approvals before it runs.");
+      setMessage("Docker install job submitted. It will run directly; no approval step is required.");
       setDockerMissing(false);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Docker install failed");
     } finally {
       setInstallingDocker(false);
     }
+  }
+
+  async function runReadAction(action: "logs" | "inspect" | "shell", c: ContainerSnapshot) {
+    if (!agentCredentialId) {
+      setError("Select an agent credential above before opening container access.");
+      return;
+    }
+    setError("");
+    setConsoleLoading(true);
+    setActiveContainer(c);
+    setConsoleTitle(`${action.toUpperCase()} · ${c.name}`);
+    try {
+      const endpoint = action === "shell" ? "/containers/exec" : `/containers/${action}`;
+      const result = await api<CommandResult>(endpoint, {
+        method: "POST",
+        body: JSON.stringify({
+          server_id: c.server_id,
+          container_name: c.name,
+          agent_credential_id: agentCredentialId,
+          ...(action === "shell" ? { command: shellCommand, timeout_seconds: 60 } : {}),
+        }),
+      });
+      const output = typeof result.output === "string" ? result.output : JSON.stringify(result.output, null, 2);
+      setConsoleOutput(output || "(no output)");
+    } catch (e) {
+      setConsoleOutput("");
+      setError(e instanceof ApiError ? e.message : "Container access failed");
+    } finally {
+      setConsoleLoading(false);
+    }
+  }
+
+  function editContainer(c: ContainerSnapshot) {
+    setImageForm({
+      name: c.name,
+      image: c.image_tag ? `${c.image}:${c.image_tag}` : c.image,
+      ports: "",
+      env: "",
+      volumes: "",
+      docker_registry: "docker.io",
+    });
+    setMode("image");
+    setShowDeploy(true);
+    setMessage(`Editing "${c.name}". Docker cannot change ports/env in place, so saving creates a replacement job with the same name.`);
+  }
+
+  function accessUrls(c: ContainerSnapshot) {
+    const server = servers.find((s) => s.id === c.server_id);
+    const host = server?.hostname;
+    if (!host || !c.ports) return [];
+    const text = typeof c.ports === "string" ? c.ports : JSON.stringify(c.ports);
+    const ports = Array.from(text.matchAll(/0\.0\.0\.0:(\d+)|:::(\d+)|:(\d+)->/g))
+      .map((m) => m[1] || m[2] || m[3])
+      .filter(Boolean);
+    return Array.from(new Set(ports)).map((p) => `http://${host}:${p}`);
   }
 
   // Inject DB credential values into container env vars
@@ -678,6 +767,53 @@ export default function ContainersPage() {
           </Card>
         )}
 
+        {activeContainer && (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Terminal className="h-4 w-4" /> {consoleTitle || activeContainer.name}
+                </CardTitle>
+                <Button size="sm" variant="outline" onClick={() => setActiveContainer(null)}>Close</Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex gap-2">
+                <Input
+                  value={shellCommand}
+                  onChange={(e) => setShellCommand(e.target.value)}
+                  placeholder="sh command inside container"
+                  className="font-mono text-xs"
+                />
+                <Button
+                  onClick={() => runReadAction("shell", activeContainer)}
+                  disabled={consoleLoading || activeContainer.state !== "running"}
+                  className="gap-2 shrink-0"
+                >
+                  {consoleLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Terminal className="h-4 w-4" />}
+                  Run
+                </Button>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <Button size="sm" variant="outline" onClick={() => runReadAction("logs", activeContainer)}>
+                  <ScrollText className="h-3.5 w-3.5 mr-1.5" /> Logs
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => runReadAction("inspect", activeContainer)}>
+                  Inspect
+                </Button>
+                {accessUrls(activeContainer).map((url) => (
+                  <a key={url} href={url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs text-primary hover:bg-muted">
+                    Open {new URL(url).port} <ExternalLink className="h-3 w-3" />
+                  </a>
+                ))}
+              </div>
+              <pre className="max-h-96 overflow-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-100">
+                {consoleLoading ? "Running..." : consoleOutput || "Choose Logs, Inspect, or run a shell command."}
+              </pre>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Summary tiles */}
         {summary && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
@@ -752,7 +888,13 @@ export default function ContainersPage() {
                   </thead>
                   <tbody>
                     {filtered.map((c) => (
-                      <ContainerRow key={c.id} c={c} onAction={(action) => runAction(action, c)} />
+                      <ContainerRow
+                        key={c.id}
+                        c={c}
+                        onAction={(action) => runAction(action, c)}
+                        onRead={runReadAction}
+                        onEdit={editContainer}
+                      />
                     ))}
                   </tbody>
                 </table>

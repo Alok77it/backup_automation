@@ -48,6 +48,7 @@ COMMAND_WHITELIST: frozenset[str] = frozenset({
     "container_list",
     "container_inspect",
     "container_logs",
+    "container_exec",
     "container_create",
     "process_list",
     "disk_usage",
