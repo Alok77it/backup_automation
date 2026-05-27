@@ -72,7 +72,17 @@ async def get_aggregated_metrics(
     )
     snapshots = result.scalars().all()
     if not snapshots:
-        return {"cpu": 0, "memory": 0, "disk": 0, "network_in": 0, "network_out": 0, "io_read": 0, "io_write": 0}
+        return {
+            "cpu": 0,
+            "memory": 0,
+            "disk": 0,
+            "network_in": 0,
+            "network_out": 0,
+            "io_read": 0,
+            "io_write": 0,
+            "backup_throughput": 0,
+            "restore_throughput": 0,
+        }
 
     return {
         "cpu": sum(s.cpu_percent or 0 for s in snapshots) / len(snapshots),

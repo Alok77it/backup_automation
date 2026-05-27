@@ -53,11 +53,34 @@ interface Aggregated {
 
 const REFRESH_INTERVAL = 30_000;
 
+const emptyAggregated: Aggregated = {
+  cpu: 0,
+  memory: 0,
+  disk: 0,
+  network_in: 0,
+  network_out: 0,
+  io_read: 0,
+  io_write: 0,
+  backup_throughput: 0,
+  restore_throughput: 0,
+};
+
+function normalizeAggregated(agg: Partial<Aggregated> | null | undefined): Aggregated {
+  return {
+    cpu: Number(agg?.cpu ?? 0),
+    memory: Number(agg?.memory ?? 0),
+    disk: Number(agg?.disk ?? 0),
+    network_in: Number(agg?.network_in ?? 0),
+    network_out: Number(agg?.network_out ?? 0),
+    io_read: Number(agg?.io_read ?? 0),
+    io_write: Number(agg?.io_write ?? 0),
+    backup_throughput: Number(agg?.backup_throughput ?? 0),
+    restore_throughput: Number(agg?.restore_throughput ?? 0),
+  };
+}
+
 export default function MonitoringPage() {
-  const [aggregated, setAggregated] = useState<Aggregated>({
-    cpu: 0, memory: 0, disk: 0, network_in: 0, network_out: 0,
-    io_read: 0, io_write: 0, backup_throughput: 0, restore_throughput: 0,
-  });
+  const [aggregated, setAggregated] = useState<Aggregated>(emptyAggregated);
   const [servers, setServers] = useState<Server[]>([]);
   const [serverId, setServerId] = useState("");
   const [metrics, setMetrics] = useState<MetricPoint[]>([]);
@@ -75,11 +98,11 @@ export default function MonitoringPage() {
     setError("");
     try {
       const [agg, srv] = await Promise.all([
-        api<Aggregated>("/monitoring/aggregated"),
+        api<Partial<Aggregated>>("/monitoring/aggregated"),
         api<Server[]>("/servers"),
       ]);
-      setAggregated(agg);
-      setServers(srv);
+      setAggregated(normalizeAggregated(agg));
+      setServers(Array.isArray(srv) ? srv : []);
       const q = serverId ? `?hours=24&server_id=${serverId}` : "?hours=24";
       const data = await api<{ recorded_at: string; cpu_percent: number; memory_percent: number; disk_percent: number }[]>(
         `/monitoring/metrics${q}`
