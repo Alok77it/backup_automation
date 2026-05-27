@@ -1,0 +1,139 @@
+PROPRIETARY SOFTWARE LICENSE AND COMMERCIAL USE TERMS
+
+Copyright (c) 2026 Alok Trivedi. All rights reserved.
+
+This software, including its source code, backend logic, APIs, workers,
+frontend code, documentation, deployment files, database schema, designs,
+and related materials (the "Software"), is proprietary and confidential.
+
+1. Ownership
+
+All intellectual property rights in the Software are owned by Alok Trivedi
+and/or the applicable owning entity designated in a signed commercial
+agreement. No ownership rights are transferred by delivery, installation,
+hosting, access, or use of the Software.
+
+2. Limited Use Permission
+
+The Software may be used only by a customer or user who has received written
+permission, a signed agreement, or a valid commercial license from the owner.
+Use is limited to the specific organization, server, domain, environment,
+users, and purpose authorized in writing.
+
+3. Restrictions
+
+Unless expressly permitted in a signed written agreement, you may not:
+
+- copy, publish, share, leak, sell, rent, lease, sublicense, redistribute, or
+  transfer the Software or any part of it;
+- modify, customize, patch, translate, adapt, fork, or create derivative works
+  from the Software;
+- remove, hide, or alter copyright, license, branding, telemetry, billing,
+  attribution, or ownership notices;
+- reverse engineer, decompile, disassemble, unpack, inspect, extract, or
+  attempt to discover source code, trade secrets, algorithms, API logic,
+  worker logic, deployment logic, or internal architecture;
+- use the Software to build, launch, operate, or assist a competing product,
+  service, platform, or commercial offering;
+- host the Software for third parties, resell access, provide it as a managed
+  service, or include it in another product without written permission;
+- bypass, disable, tamper with, or avoid any license key, activation, usage
+  limit, domain restriction, server restriction, billing control, audit
+  control, or security mechanism.
+
+4. Enterprise, Resale, and Commercial Exploitation
+
+Enterprise deployment, resale, redistribution, white-label use, third-party
+hosting, managed-service use, marketplace listing, bundling, or any use that
+generates direct or indirect commercial revenue requires a separate written
+commercial agreement.
+
+If the Software or any derivative, modified, copied, reverse-engineered,
+competing, or substantially similar work is used for enterprise deployment,
+resale, redistribution, white-label service, managed service, or commercial
+sale without written authorization, the user, organization, reseller, or
+operator agrees to pay the owner a revenue share equal to forty percent (40%)
+of gross revenue, contract value, subscription fees, service fees, resale
+proceeds, or other commercial benefit derived from such use, in addition to
+any other remedies available by law or contract.
+
+The owner may agree in writing to a different commercial percentage, including
+a thirty percent (30%) to forty percent (40%) range, but no reduced percentage
+applies unless signed by the owner.
+
+5. Confidentiality
+
+The Software and all non-public technical, business, deployment, pricing,
+customer, and operational information related to it are confidential. You must
+protect them from unauthorized access, copying, disclosure, and use.
+
+6. Access and Deployment
+
+Server access, repository access, container access, or dashboard access does
+not grant any right to inspect, copy, modify, redistribute, or commercialize
+the Software. If the Software is deployed on customer infrastructure, the
+customer may operate only the licensed instance and may not tamper with
+application files, containers, images, databases, license controls, or
+deployment configuration.
+
+7. Support and Updates
+
+Support, updates, maintenance, migrations, backups, customization, self-hosted
+deployment, and enterprise use are provided only if agreed in writing. Support
+may be suspended or terminated if unauthorized modification, tampering,
+reverse engineering, resale, non-payment, or breach of these terms is
+detected.
+
+8. Audit and Verification
+
+The owner may require reasonable verification of deployment scope, server
+count, domain count, user count, customer count, usage, and revenue related to
+the Software. Refusal to provide reasonable verification may be treated as a
+license breach.
+
+9. Termination
+
+Any unauthorized use, copying, modification, reverse engineering, resale,
+redistribution, sublicensing, non-payment, or breach of these terms
+automatically terminates all permissions to use the Software. Upon
+termination, you must immediately stop using the Software and delete all
+copies, deployments, containers, images, credentials, and related materials
+unless otherwise required by a signed written agreement.
+
+10. No Warranty
+
+The Software is provided "as is" unless a signed written agreement states
+otherwise. The owner disclaims all warranties to the maximum extent permitted
+by law, including warranties of merchantability, fitness for a particular
+purpose, non-infringement, availability, data loss prevention, and error-free
+operation.
+
+11. Limitation of Liability
+
+To the maximum extent permitted by law, the owner is not liable for indirect,
+incidental, special, consequential, punitive, or business-loss damages,
+including lost profits, lost revenue, loss of data, downtime, security
+incidents, or interruption of business, except where a signed written
+agreement states otherwise.
+
+12. Remedies
+
+Unauthorized copying, modification, reverse engineering, redistribution,
+resale, or commercial exploitation may cause irreparable harm. The owner may
+seek injunctive relief, damages, unpaid license fees, revenue share, audit
+costs, legal costs, and any other remedies available under law or contract.
+
+13. Written Agreement Controls
+
+If a signed written agreement between the owner and a customer conflicts with
+this license, the signed written agreement controls only for that customer and
+only for the specific conflict. All other terms remain in effect.
+
+14. Third-Party Components
+
+Third-party libraries and dependencies included with or used by the Software
+remain subject to their own licenses. This license applies to the proprietary
+Software and materials owned by the owner.
+
+By accessing, installing, copying, deploying, hosting, or using the Software,
+you agree to these terms.

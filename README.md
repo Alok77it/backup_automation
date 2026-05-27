@@ -126,3 +126,11 @@ docker compose logs --tail=100 frontend
 docker compose logs --tail=100 nginx
 sudo find /data/backups -maxdepth 5 -type f | sort
 ```
+
+## License
+
+This project is proprietary software. Copying, modification, resale,
+redistribution, reverse engineering, white-label use, third-party hosting, or
+enterprise/commercial use is not allowed without written permission.
+
+See `LICENSE` for full terms.
