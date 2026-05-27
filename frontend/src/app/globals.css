@@ -1,141 +1,113 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Rubik:wght@400;500;600;700&display=swap');
 
-/* ── Sanity design system — dark-first ──────────────────────────────────────── */
+/* ── Sentry-inspired design — deep violet + electric lime ─────────────────── */
 
 :root {
-  /* Canvas */
-  --background:        #0b0b0b;
-  --canvas-soft:       #212121;
-  --canvas-paper:      #ededed;
-  --canvas-light:      #ffffff;
+  /* Canvas / surfaces */
+  --background:         #150f23;
+  --canvas-soft:        #1f1633;
+  --canvas-mid:         #2d2540;
+  --canvas-light:       #ffffff;
+  --canvas-paper:       #f0f0f0;
 
   /* Text */
-  --foreground:        #ffffff;
-  --ash:               #b9b9b9;
-  --mute:              #797979;
-  --graphite:          #353535;
-  --slate:             #3c4758;
+  --foreground:         #ffffff;
+  --muted-foreground:   #bdb8c0;
+  --faint:              #3f3849;
+  --hairline:           #362d59;
 
   /* Surfaces */
-  --card:              #212121;
-  --card-foreground:   #ffffff;
-  --primary:           #f36458;
-  --primary-foreground:#0b0b0b;
-  --secondary:         #212121;
-  --secondary-foreground: #b9b9b9;
-  --muted:             #353535;
-  --muted-foreground:  #797979;
-  --accent:            #f36458;
-  --accent-foreground: #0b0b0b;
+  --card:               #1f1633;
+  --card-foreground:    #ffffff;
+  --primary:            #c2ef4e;
+  --primary-foreground: #150f23;
+  --secondary:          #2d2540;
+  --secondary-foreground: #bdb8c0;
+  --muted:              #2d2540;
+  --accent:             #c2ef4e;
+  --accent-foreground:  #150f23;
+  --accent-pink:        #fa7faa;
+  --accent-violet:      #6a5fc1;
+  --accent-violet-deep: #422082;
 
   /* Semantic */
-  --destructive:       #dd0000;
-  --success:           #37cd84;
-  --link-blue:         #55beff;
-  --surface-blue:      #afe3ff;
+  --destructive:        #f04646;
+  --success:            #4dc771;
+  --warning:            #f4a24c;
+  --link:               #9dc1f5;
 
   /* Borders */
-  --border:            #353535;
-  --hairline:          #ededed;
-  --ring:              #f36458;
+  --border:             #362d59;
+  --ring:               #c2ef4e;
 
-  --sidebar-width:     260px;
-
-  /* Radius tokens */
-  --radius-xs:         3px;
-  --radius-sm:         4px;
-  --radius-md:         5px;
-  --radius-lg:         6px;
-  --radius-marketing:  12px;
+  --sidebar-width:      260px;
 }
 
 @theme inline {
-  --color-background:  var(--background);
-  --color-foreground:  var(--foreground);
-  --color-primary:     var(--primary);
-  --color-card:        var(--card);
-  --color-border:      var(--border);
-  --color-muted:       var(--muted);
-  --color-accent:      var(--accent);
-  --font-sans:         'Inter', system-ui, sans-serif;
-  --font-mono:         'IBM Plex Mono', 'Courier New', monospace;
+  --color-background:   var(--background);
+  --color-foreground:   var(--foreground);
+  --color-primary:      var(--primary);
+  --color-card:         var(--card);
+  --color-border:       var(--border);
+  --color-muted:        var(--muted);
+  --color-accent:       var(--accent);
+  --font-sans:          'Rubik', system-ui, sans-serif;
+  --font-mono:          'IBM Plex Mono', 'Courier New', monospace;
 }
 
-* {
-  border-color: var(--border);
-  box-sizing: border-box;
-}
+* { border-color: var(--border); box-sizing: border-box; }
 
-html {
-  color-scheme: dark;
-}
+html { color-scheme: dark; }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Rubik', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Eyebrow / mono label utility ──────────────────────────────────────────── */
+/* ── Utilities ──────────────────────────────────────────────────────────────── */
 .eyebrow {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  font-weight: 400;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--mute);
+  font-size: 11px; font-weight: 400;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted-foreground);
 }
 
-/* ── Brand dot ─────────────────────────────────────────────────────────────── */
 .brand-dot {
-  width: 10px;
-  height: 10px;
+  width: 10px; height: 10px;
   border-radius: 9999px;
   background: var(--primary);
-  flex-shrink: 0;
-  display: inline-block;
+  flex-shrink: 0; display: inline-block;
 }
 
-/* ── Surfaces ──────────────────────────────────────────────────────────────── */
-.glass {
-  background: var(--canvas-soft);
-  border: 1px solid var(--border);
-}
+.glass { background: var(--canvas-soft); border: 1px solid var(--border); }
 
 .card-shadow {
-  box-shadow: 0 1px 3px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.35);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.6), 0 4px 20px rgba(21,15,35,0.5);
 }
 
-/* ── Brand accent (kept for accent spots only) ─────────────────────────────── */
-.gradient-primary {
-  background: var(--primary);
-}
+.gradient-primary { background: var(--primary); }
+.gradient-text    { color: var(--primary); }
+.sidebar-glow     { box-shadow: 2px 0 24px rgba(0,0,0,0.5); }
 
-.gradient-text {
-  color: var(--primary);
-}
-
-/* ── Sidebar shadow ────────────────────────────────────────────────────────── */
-.sidebar-glow {
-  box-shadow: 2px 0 24px rgba(0,0,0,0.5);
-}
-
-/* ── Scrollbar ─────────────────────────────────────────────────────────────── */
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #353535; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: #797979; }
+::-webkit-scrollbar-thumb { background: #362d59; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #6a5fc1; }
 
-/* ── Selection ─────────────────────────────────────────────────────────────── */
-::selection { background: rgba(243,100,88,0.28); color: #fff; }
+/* ── Selection ──────────────────────────────────────────────────────────────── */
+::selection { background: rgba(194,239,78,0.25); color: #fff; }
 
-/* ── Tech grid (dark version) ──────────────────────────────────────────────── */
+/* ── Tech grid ──────────────────────────────────────────────────────────────── */
 .tech-grid {
   background-image:
-    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    linear-gradient(rgba(194,239,78,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(194,239,78,0.03) 1px, transparent 1px);
   background-size: 48px 48px;
 }
+
+/* ── Lime glow ──────────────────────────────────────────────────────────────── */
+.lime-glow { box-shadow: 0 0 40px rgba(194,239,78,0.15); }

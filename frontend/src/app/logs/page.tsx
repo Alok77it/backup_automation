@@ -97,7 +97,7 @@ function SysLogRow({ log }: { log: LogEntry }) {
   const [open, setOpen] = useState(false);
   return (
     <div
-      className="rounded-xl border bg-white transition hover:border-primary/40 cursor-pointer select-none"
+      className="rounded-xl border bg-[#1f1633] transition hover:border-primary/40 cursor-pointer select-none"
       onClick={() => setOpen((v) => !v)}
     >
       <div className="flex items-start gap-3 p-3">
@@ -112,7 +112,7 @@ function SysLogRow({ log }: { log: LogEntry }) {
         </div>
       </div>
       {open && (
-        <div className="border-t bg-muted/30 rounded-b-xl px-4 py-3 space-y-2">
+        <div className="border-t bg-[#1f1633]/60 rounded-b-xl px-4 py-3 space-y-2">
           <div className="font-mono text-xs text-foreground whitespace-pre-wrap break-words bg-slate-900 text-[#37cd84] rounded-lg p-3">
             {log.message}
           </div>
@@ -168,7 +168,7 @@ function JobRow({
   return (
     <div
       className={`rounded-xl border transition cursor-pointer ${
-        isFailed ? "border-red-200 bg-red-50/40 hover:border-red-300" : "bg-white hover:border-primary/40"
+        isFailed ? "border-red-900/60 bg-red-950/30 hover:border-red-700" : "bg-[#1f1633] hover:border-[#c2ef4e]/40"
       }`}
       onClick={toggle}
     >
@@ -216,7 +216,7 @@ function JobRow({
 
       {open && (
         <div
-          className="border-t bg-muted/20 rounded-b-xl p-4 space-y-4"
+          className="border-t bg-[#1f1633]/40 rounded-b-xl p-4 space-y-4"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Meta grid */}
@@ -426,7 +426,7 @@ export default function LogsPage() {
 
         {/* Stats */}
         <div className="flex gap-3 flex-wrap">
-          <div className="rounded-lg border bg-white px-4 py-2 text-sm flex items-center gap-2">
+          <div className="rounded-lg border bg-[#1f1633] px-4 py-2 text-sm flex items-center gap-2">
             <Terminal className="h-4 w-4 text-muted-foreground" />
             <span className="font-semibold">{jobs.length}</span> total jobs
           </div>
@@ -447,11 +447,11 @@ export default function LogsPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 rounded-xl border bg-muted/40 p-1 w-fit">
+        <div className="flex gap-1 rounded-xl border bg-[#150f23] p-1 w-fit">
           <button
             onClick={() => setTab("jobs")}
             className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition ${
-              tab === "jobs" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+              tab === "jobs" ? "bg-[#2d2540] shadow text-white" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <Play className="h-3.5 w-3.5" /> Job Logs
@@ -464,7 +464,7 @@ export default function LogsPage() {
           <button
             onClick={() => setTab("system")}
             className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition ${
-              tab === "system" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+              tab === "system" ? "bg-[#2d2540] shadow text-white" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <ScrollText className="h-3.5 w-3.5" /> System Logs

@@ -667,7 +667,7 @@ function InstallWizard({
               {TOOLS.map((t) => {
                 const existing = installations.filter((i) => i.plugin_id === t.id);
                 return (
-                  <button key={t.id} onClick={() => pickTool(t)} className="flex items-start gap-3 rounded-xl border bg-white p-4 text-left hover:border-primary hover:shadow-sm transition">
+                  <button key={t.id} onClick={() => pickTool(t)} className="flex items-start gap-3 rounded-xl border bg-[#1f1633] p-4 text-left hover:border-primary hover:shadow-sm transition">
                     <span className="text-2xl mt-0.5">{t.icon}</span>
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-sm">{t.name}</div>
@@ -701,7 +701,7 @@ function InstallWizard({
               {servers.map((s) => {
                 const existing = installations.find((i) => i.server_id === s.id && i.plugin_id === selectedTool.id);
                 return (
-                  <button key={s.id} onClick={() => pickServer(s.id)} className="flex w-full items-center justify-between rounded-xl border bg-white p-3.5 text-left hover:border-primary hover:shadow-sm transition">
+                  <button key={s.id} onClick={() => pickServer(s.id)} className="flex w-full items-center justify-between rounded-xl border bg-[#1f1633] p-3.5 text-left hover:border-primary hover:shadow-sm transition">
                     <div className="flex items-center gap-3">
                       <Server className="h-4 w-4 text-muted-foreground" />
                       <div>
@@ -774,7 +774,7 @@ function InstallWizard({
                           )}
                         </p>
                         {inlineOpen[type] && (
-                          <div className="rounded-lg border bg-white p-3 space-y-2">
+                          <div className="rounded-lg border bg-[#1f1633] p-3 space-y-2">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-xs font-semibold text-foreground">
                                 {PROVIDER_ICON[type]} Add {typeCfg.label} Credential
@@ -845,7 +845,7 @@ function InstallWizard({
                             + Add another {typeCfg.label} credential
                           </button>
                         ) : (
-                          <div className="rounded-lg border bg-white p-3 space-y-2 mt-2">
+                          <div className="rounded-lg border bg-[#1f1633] p-3 space-y-2 mt-2">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-xs font-semibold">
                                 {PROVIDER_ICON[type]} New {typeCfg.label} Credential
@@ -912,7 +912,7 @@ function InstallWizard({
         {/* Step 4 — Confirm */}
         {step === "confirm" && selectedTool && (
           <div className="space-y-4">
-            <div className="rounded-xl border bg-muted/30 p-4 space-y-2 text-sm">
+            <div className="rounded-xl border bg-[#1f1633]/60 p-4 space-y-2 text-sm">
               <div className="font-semibold text-base flex items-center gap-2">
                 <span>{selectedTool.icon}</span> {selectedTool.name}
               </div>
@@ -1175,13 +1175,13 @@ ${envLines.map((e) => `      - ${e}`).join("\n") || "      []"}
         {success && <div className="rounded-lg border border-[#37cd84]/30 bg-[#37cd84]/08 text-[#37cd84] p-2.5 text-xs">{success}</div>}
 
         {/* Mode toggle */}
-        <div className="flex gap-1 rounded-xl border bg-muted/40 p-1 w-fit">
+        <div className="flex gap-1 rounded-xl border bg-[#150f23] p-1 w-fit">
           {(["server", "container"] as const).map((m) => (
             <button
               key={m}
               onClick={() => setRunMode(m)}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                runMode === m ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                runMode === m ? "bg-[#2d2540] shadow text-white" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {m === "server" ? <Server className="h-3.5 w-3.5" /> : <span className="text-sm">🐳</span>}

@@ -711,12 +711,12 @@ export default function ContainersPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex w-fit rounded-lg border bg-muted/40 p-1">
+              <div className="flex w-fit rounded-lg border bg-[#150f23] p-1">
                 {(["image", "compose"] as const).map((m) => (
                   <button
                     key={m}
                     className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize ${
-                      mode === m ? "bg-white shadow" : "text-muted-foreground"
+                      mode === m ? "bg-[#2d2540] shadow" : "text-muted-foreground"
                     }`}
                     onClick={() => setMode(m)}
                   >
@@ -847,7 +847,7 @@ export default function ContainersPage() {
                 <button
                   key={label}
                   onClick={() => setStateFilter(label === "total" ? null : label)}
-                  className={`rounded-xl border bg-white p-3 text-left transition hover:border-primary hover:shadow-sm ${
+                  className={`rounded-xl border bg-[#1f1633] p-3 text-left transition hover:border-primary hover:shadow-sm ${
                     active ? "border-primary ring-1 ring-primary/20 bg-primary/5" : ""
                   }`}
                 >
