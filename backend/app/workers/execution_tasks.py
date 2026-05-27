@@ -350,6 +350,8 @@ def _ssh_fallback_command(command: str, args: dict) -> str | None:
             "set -e; export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none; "
             f"mkdir -p {_shell_quote(install_path)} {prepare_dirs}; "
             f"printf %s {_shell_quote(encoded)} | base64 -d > {_shell_quote(install_path)}/docker-compose.yml; "
+            f"docker compose -f {_shell_quote(install_path)}/docker-compose.yml down --remove-orphans >/dev/null 2>&1 || true; "
+            f"{_compose_port_patch(args, f'{install_path}/docker-compose.yml')}"
             f"docker compose -f {_shell_quote(install_path)}/docker-compose.yml up -d --pull always"
         )
     if command == "docker_compose_down":
@@ -487,6 +489,42 @@ def _compose_prepare_dirs(args: dict) -> str:
         if text.startswith("/") and "\n" not in text:
             dirs.append(_shell_quote(text))
     return " ".join(dict.fromkeys(dirs))
+
+
+def _compose_port_patch(args: dict, compose_file: str) -> str:
+    plugin_id = str(args.get("plugin_id") or "")
+    config = args.get("config") or {}
+    mappings: list[tuple[str, int, int, str]] = []
+    if plugin_id == "jenkins":
+        mappings.append(("Jenkins UI", _int_or_default(config.get("jenkins_port"), 8080), 8080, "jenkins_port"))
+        mappings.append(("Jenkins agent", _int_or_default(config.get("jenkins_agent_port"), 50000), 50000, "jenkins_agent_port"))
+    elif plugin_id == "n8n":
+        mappings.append(("n8n", _int_or_default(config.get("n8n_port"), 5678), 5678, "n8n_port"))
+    if not mappings:
+        return ""
+
+    lines = [
+        "port_busy(){ if command -v ss >/dev/null 2>&1; then ss -H -ltn \"sport = :$1\" | grep -q .; else netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Eq \"[:.]$1$\"; fi; }; ",
+        "pick_port(){ p=\"$1\"; while port_busy \"$p\"; do p=$((p+1)); done; printf \"%s\" \"$p\"; }; ",
+    ]
+    quoted_file = _shell_quote(compose_file)
+    for label, public_port, container_port, _key in mappings:
+        safe_label = label.replace("'", "")
+        lines.append(
+            f"p={public_port}; np=$(pick_port \"$p\"); "
+            f"if [ \"$np\" != \"$p\" ]; then "
+            f"sed -i \"s/[\\\"']$p:{container_port}[\\\"']/\\\"$np:{container_port}\\\"/g\" {quoted_file}; "
+            f"echo '[PORT] {safe_label} port '$p' busy; using '$np; "
+            "fi; "
+        )
+    return "".join(lines)
+
+
+def _int_or_default(value: object, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 async def _handle_plugin_install(db, job) -> dict:

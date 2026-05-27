@@ -160,11 +160,11 @@ const TOOLS: ToolDef[] = [
     description: "Deploy Jenkins CI/CD server",
     requiredCredTypes: ["agent", "jenkins"],
     configFields: [
-      { key: "jenkins_port", label: "Jenkins Port", placeholder: "8080" },
+      { key: "jenkins_port", label: "Jenkins Port", placeholder: "18080" },
       { key: "jenkins_agent_port", label: "Agent Port", placeholder: "50000" },
       { key: "jenkins_home", label: "Data Directory", placeholder: "/opt/jenkins/data" },
     ],
-    defaultConfig: { jenkins_port: 8080, jenkins_agent_port: 50000, jenkins_home: "/opt/jenkins/data" },
+    defaultConfig: { jenkins_port: 18080, jenkins_agent_port: 50000, jenkins_home: "/opt/jenkins/data" },
   },
   {
     id: "n8n",

@@ -140,6 +140,13 @@ def _render_compose(plugin_id: str, config: dict[str, Any]) -> str | None:
     return Template(template).render(**config)
 
 
+def _int_config(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 @router.get("/catalog", response_model=list[PluginOut])
 async def get_plugin_catalog(
     db: DbSession,
@@ -210,6 +217,10 @@ async def install_plugin(
             config.setdefault("n8n_host", config.get("public_ip") or server_host)
             config.setdefault("ssl_enabled", False)
             config.setdefault("n8n_basic_auth_active", bool(config.get("n8n_basic_auth_password")))
+        if plugin_id == "jenkins":
+            config.setdefault("jenkins_port", 18080)
+            config.setdefault("jenkins_agent_port", 50000)
+            config.setdefault("jenkins_home", "/opt/jenkins/data")
         install = await plugin_manager.request_install(
             db,
             organization_id=membership.organization_id,
@@ -411,6 +422,13 @@ async def manage_plugin(
     if server:
         config.setdefault("public_ip", config.get("public_ip") or server.hostname)
         config.setdefault("server_hostname", config.get("server_hostname") or server.hostname)
+    if plugin_id == "jenkins" and _int_config(config.get("jenkins_port"), 8080) == 8080:
+        config["jenkins_port"] = 18080
+        host = config.get("public_ip") or (server.hostname if server else None)
+        if host:
+            install.access_url = f"http://{host}:18080"
+        install.config = config
+        await db.commit()
     install_path = install.install_path or config.get("install_path") or f"/opt/{plugin_id}"
     compose_content = _render_compose(plugin_id, config)
     if not compose_content and action in {"start", "redeploy", "restart", "stop", "logs"}:

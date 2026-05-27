@@ -444,6 +444,8 @@ async def _compose_operation(operation: str, args: dict, timeout: int) -> str:
             f.write(compose_content)
 
     if operation in ("plugin_install", "compose_up"):
+        await _run_subprocess(["docker", "compose", "-f", f"{install_path}/docker-compose.yml", "down", "--remove-orphans"], 120)
+        _patch_compose_ports(args, f"{install_path}/docker-compose.yml")
         cmd = ["docker", "compose", "-f", f"{install_path}/docker-compose.yml", "up", "-d", "--pull", "always"]
     elif operation in ("plugin_uninstall", "compose_down"):
         cmd = ["docker", "compose", "-f", f"{install_path}/docker-compose.yml", "down", "--remove-orphans"]
@@ -471,6 +473,53 @@ def _compose_prepare_dirs(args: dict) -> list[str]:
         if text.startswith("/") and "\n" not in text and text not in dirs:
             dirs.append(text)
     return dirs
+
+
+def _patch_compose_ports(args: dict, compose_file: str) -> None:
+    plugin_id = str(args.get("plugin_id") or "")
+    config = args.get("config") or {}
+    mappings: list[tuple[str, int, int]] = []
+    if plugin_id == "jenkins":
+        mappings.append(("Jenkins UI", _int_or_default(config.get("jenkins_port"), 8080), 8080))
+        mappings.append(("Jenkins agent", _int_or_default(config.get("jenkins_agent_port"), 50000), 50000))
+    elif plugin_id == "n8n":
+        mappings.append(("n8n", _int_or_default(config.get("n8n_port"), 5678), 5678))
+    if not mappings:
+        return
+    import socket
+    from pathlib import Path
+
+    path = Path(compose_file)
+    if not path.exists():
+        return
+    content = path.read_text()
+    for _label, public_port, container_port in mappings:
+        port = public_port
+        while _port_busy(port):
+            port += 1
+        if port != public_port:
+            content = content.replace(f'"{public_port}:{container_port}"', f'"{port}:{container_port}"')
+            content = content.replace(f"'{public_port}:{container_port}'", f'"{port}:{container_port}"')
+    path.write_text(content)
+
+
+def _port_busy(port: int) -> bool:
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("0.0.0.0", int(port)))
+        except OSError:
+            return True
+    return False
+
+
+def _int_or_default(value: object, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _safe_name(value: str, fallback: str = "managed") -> str:
