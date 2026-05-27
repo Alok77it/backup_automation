@@ -25,7 +25,7 @@ interface DBRun {
   log_output: string | null;
   metadata_json?: {
     backup_name?: string; db_type?: string; db_name?: string;
-    db_host?: string; target_path?: string;
+    db_host?: string; target_path?: string; dump_file?: string; storage_dir?: string;
   } | null;
 }
 
