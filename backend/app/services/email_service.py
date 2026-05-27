@@ -24,6 +24,7 @@ async def send_email(to_addresses: list[str], subject: str, html_body: str, text
             hostname=settings.SMTP_HOST,
             port=settings.SMTP_PORT,
             use_tls=use_tls,
+            start_tls=False,
         )
         await smtp.connect()
         if settings.SMTP_PORT == 587:
