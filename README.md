@@ -80,23 +80,75 @@ http://YOUR_SERVER_IP/login
 http://YOUR_SERVER_IP/signup
 ```
 
-## Run With Welcome Disabled
+## Customer Docker Image Install
 
-Use this for customer/on-prem installs:
+Use this when the customer server should run from Docker images instead of source code. Welcome is disabled in this mode.
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.customer.yml up -d --build postgres redis
-docker compose -f docker-compose.yml -f docker-compose.customer.yml --profile migrate run --rm migrate
-docker compose -f docker-compose.yml -f docker-compose.customer.yml up -d --build
-docker compose -f docker-compose.yml -f docker-compose.customer.yml ps
+The customer compose expects these images to already exist for the selected `IMAGE_NAMESPACE` and `IMAGE_TAG`:
+
+```text
+IMAGE_NAMESPACE/backup-automation-backend:IMAGE_TAG
+IMAGE_NAMESPACE/backup-automation-frontend:IMAGE_TAG
+IMAGE_NAMESPACE/backup-automation-prometheus:IMAGE_TAG
 ```
 
-In this mode:
+Copy only these files/folders to the customer server:
+
+```text
+/opt/backup_automation/
+├── docker-compose.customer.yml
+├── .env
+└── nginx/
+    └── nginx.conf
+```
+
+Create the folder:
+
+```bash
+sudo mkdir -p /opt/backup_automation/nginx
+cd /opt/backup_automation
+sudo mkdir -p /data/backups
+```
+
+Use the normal `.env` values, then add/update these image settings:
+
+```env
+IMAGE_NAMESPACE=aloktr2002
+IMAGE_TAG=latest
+```
+
+Required `.env` basics:
+
+```env
+JWT_SECRET=PASTE_HEX_SECRET
+ENCRYPTION_KEY=PASTE_BASE64_KEY
+POSTGRES_USER=backupintel
+POSTGRES_PASSWORD=CHANGE_THIS_PASSWORD
+POSTGRES_DB=backup_intelligence
+BACKUP_STORAGE_PATH=/data/backups
+FRONTEND_URL=http://YOUR_SERVER_IP
+API_URL=http://YOUR_SERVER_IP/api
+CORS_ORIGINS=http://YOUR_SERVER_IP
+IMAGE_NAMESPACE=aloktr2002
+IMAGE_TAG=latest
+```
+
+Run the customer stack:
+
+```bash
+docker compose -f docker-compose.customer.yml pull
+docker compose -f docker-compose.customer.yml up -d postgres redis
+docker compose -f docker-compose.customer.yml --profile migrate run --rm migrate
+docker compose -f docker-compose.customer.yml up -d
+docker compose -f docker-compose.customer.yml ps
+```
+
+Open:
 
 ```text
 /welcome -> /login
-/login works
-/signup works
+http://YOUR_SERVER_IP/login
+http://YOUR_SERVER_IP/signup
 ```
 
 ## Update Existing Server
@@ -108,14 +160,24 @@ docker compose up -d --build api worker beat frontend nginx
 docker compose ps
 ```
 
-Customer mode update:
+Customer image mode update:
 
 ```bash
-git pull
+cd /opt/backup_automation
 sudo mkdir -p /data/backups
-docker compose -f docker-compose.yml -f docker-compose.customer.yml up -d --build api worker beat frontend nginx
-docker compose -f docker-compose.yml -f docker-compose.customer.yml ps
+docker compose -f docker-compose.customer.yml pull
+docker compose -f docker-compose.customer.yml --profile migrate run --rm migrate
+docker compose -f docker-compose.customer.yml up -d
+docker compose -f docker-compose.customer.yml ps
 ```
+
+For versioned releases, change only `.env`:
+
+```env
+IMAGE_TAG=v1.0.1
+```
+
+Then run the same customer image update commands.
 
 ## Useful Checks
 
