@@ -80,15 +80,83 @@ http://YOUR_SERVER_IP/login
 http://YOUR_SERVER_IP/signup
 ```
 
-## Run With Welcome Disabled
+## Build And Push Customer Images
+
+Use this from the private source checkout. The customer images are built with welcome disabled.
+
+Make sure Docker Desktop is running, then verify Docker can reach the engine:
+
+```powershell
+docker context use desktop-linux
+docker info
+```
+
+Build and push the latest public Docker Hub images:
+
+```powershell
+.\scripts\build-push-release.ps1 -Namespace aloktr2002 -Tag latest
+```
+
+For a customer release, prefer version tags:
+
+```powershell
+.\scripts\build-push-release.ps1 -Namespace aloktr2002 -Tag v1.0.0
+```
+
+Published images:
+
+```text
+https://hub.docker.com/r/aloktr2002/backup-automation-backend
+https://hub.docker.com/r/aloktr2002/backup-automation-frontend
+https://hub.docker.com/r/aloktr2002/backup-automation-nginx
+https://hub.docker.com/r/aloktr2002/backup-automation-prometheus
+```
+
+## Customer Install Without Source Code
 
 Use this for customer/on-prem installs:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.customer.yml up -d --build postgres redis
-docker compose -f docker-compose.yml -f docker-compose.customer.yml --profile migrate run --rm migrate
-docker compose -f docker-compose.yml -f docker-compose.customer.yml up -d --build
-docker compose -f docker-compose.yml -f docker-compose.customer.yml ps
+mkdir -p backup_automation
+cd backup_automation
+```
+
+Copy only these files to the customer server:
+
+```text
+docker-compose.customer.yml
+.env
+```
+
+Create `.env` from `.env.customer.example`, then edit it:
+
+```bash
+cp .env.customer.example .env
+nano .env
+```
+
+Required customer `.env` image settings:
+
+```env
+IMAGE_NAMESPACE=aloktr2002
+IMAGE_TAG=v1.0.0
+```
+
+Run database, Redis, and migrations:
+
+```bash
+sudo mkdir -p /data/backups
+docker compose -f docker-compose.customer.yml pull
+docker compose -f docker-compose.customer.yml up -d postgres redis
+docker compose -f docker-compose.customer.yml --profile migrate run --rm migrate
+docker compose -f docker-compose.customer.yml up -d
+docker compose -f docker-compose.customer.yml ps
+```
+
+Run migrations manually at any time:
+
+```bash
+docker compose -f docker-compose.customer.yml --profile migrate run --rm migrate
 ```
 
 In this mode:
@@ -110,12 +178,38 @@ docker compose ps
 
 Customer mode update:
 
-```bash
-git pull
-sudo mkdir -p /data/backups
-docker compose -f docker-compose.yml -f docker-compose.customer.yml up -d --build api worker beat frontend nginx
-docker compose -f docker-compose.yml -f docker-compose.customer.yml ps
+For a new release, first update `.env`:
+
+```env
+IMAGE_NAMESPACE=aloktr2002
+IMAGE_TAG=v1.0.1
 ```
+
+Then pull the new images, run migrations, and restart services:
+
+```bash
+sudo mkdir -p /data/backups
+docker compose -f docker-compose.customer.yml pull
+docker compose -f docker-compose.customer.yml --profile migrate run --rm migrate
+docker compose -f docker-compose.customer.yml up -d
+docker compose -f docker-compose.customer.yml ps
+```
+
+If using `IMAGE_TAG=latest`, keep the same `.env` and run the same update commands after pushing new latest images.
+
+Rollback to an older image tag:
+
+```env
+IMAGE_TAG=v1.0.0
+```
+
+```bash
+docker compose -f docker-compose.customer.yml pull
+docker compose -f docker-compose.customer.yml up -d
+docker compose -f docker-compose.customer.yml ps
+```
+
+Take a database backup before production updates. Database migrations usually move forward and are not automatically rolled back by changing the image tag.
 
 ## Useful Checks
 
