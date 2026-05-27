@@ -156,6 +156,12 @@ COMMAND_DEFINITIONS: dict[str, dict] = {
     "docker_compose_down": {
         "handler": "compose_down",
     },
+    "docker_compose_restart": {
+        "handler": "compose_restart",
+    },
+    "docker_compose_logs": {
+        "handler": "compose_logs",
+    },
     "script_run_approved": {
         "handler": "run_approved_script",
     },
@@ -275,7 +281,7 @@ async def _dispatch(command: str, args: dict, timeout: int) -> tuple[Any, int]:
         cmd_str = args.get("command_string", "")
         return await _run_shell_command(cmd_str.split(), timeout), 0
 
-    if handler in ("plugin_install", "plugin_uninstall", "compose_up", "compose_down"):
+    if handler in ("plugin_install", "plugin_uninstall", "compose_up", "compose_down", "compose_restart", "compose_logs"):
         return await _compose_operation(handler, args, timeout), 0
 
     if handler == "run_approved_script":
@@ -429,6 +435,8 @@ async def _compose_operation(operation: str, args: dict, timeout: int) -> str:
     import os as _os
     if not _os.path.exists(install_path):
         _os.makedirs(install_path, exist_ok=True)
+    for path in _compose_prepare_dirs(args):
+        _os.makedirs(path, exist_ok=True)
 
     compose_content = args.get("compose_content")
     if compose_content:
@@ -439,10 +447,30 @@ async def _compose_operation(operation: str, args: dict, timeout: int) -> str:
         cmd = ["docker", "compose", "-f", f"{install_path}/docker-compose.yml", "up", "-d", "--pull", "always"]
     elif operation in ("plugin_uninstall", "compose_down"):
         cmd = ["docker", "compose", "-f", f"{install_path}/docker-compose.yml", "down", "--remove-orphans"]
+    elif operation == "compose_restart":
+        cmd = ["docker", "compose", "-f", f"{install_path}/docker-compose.yml", "restart"]
+    elif operation == "compose_logs":
+        cmd = ["docker", "compose", "-f", f"{install_path}/docker-compose.yml", "logs", "--tail", "200"]
     else:
         return "Unknown compose operation"
 
     return await _run_subprocess(cmd, timeout)
+
+
+def _compose_prepare_dirs(args: dict) -> list[str]:
+    config = args.get("config") or {}
+    install_path = args.get("install_path", "/opt/devops-plugin")
+    candidates = [
+        config.get("jenkins_home"),
+        f"{install_path}/data",
+        f"{config.get('install_path')}/data" if config.get("install_path") else None,
+    ]
+    dirs: list[str] = []
+    for item in candidates:
+        text = str(item or "").strip()
+        if text.startswith("/") and "\n" not in text and text not in dirs:
+            dirs.append(text)
+    return dirs
 
 
 def _safe_name(value: str, fallback: str = "managed") -> str:

@@ -193,9 +193,6 @@ async def _handle_agent_command(db, job) -> dict:
         )
     )
     token = token_result.scalar_one_or_none()
-    if not token and not (payload.get("_agent_token_raw") or payload.get("agent_credential_id")):
-        raise ValueError("No active agent token for this server and no stored agent credential was provided")
-
     # NOTE: raw token NOT stored; we use the job payload for one-time commands.
     # For scheduled tasks, the raw token is retrieved from secrets manager.
     raw_token = payload.get("_agent_token_raw")
@@ -211,26 +208,32 @@ async def _handle_agent_command(db, job) -> dict:
         cred = cred_result.scalar_one_or_none()
         if cred:
             raw_token = decrypt_secret(cred.encrypted_secret)
-    if not raw_token:
-        raise ValueError("Agent token missing from job payload")
-
-    try:
-        response = await agent_comm.execute(
-            server_hostname=server.hostname,
-            server_port=payload.get("agent_port", 9977),
-            agent_token_raw=raw_token,
-            command=command,
-            args=args,
-            job_id=str(job.id),
-            timeout_seconds=job.timeout_seconds,
-        )
-    except AgentCommunicationError as exc:
+    if raw_token:
+        try:
+            response = await agent_comm.execute(
+                server_hostname=server.hostname,
+                server_port=payload.get("agent_port", 9977),
+                agent_token_raw=raw_token,
+                command=command,
+                args=args,
+                job_id=str(job.id),
+                timeout_seconds=job.timeout_seconds,
+            )
+        except AgentCommunicationError as exc:
+            response = await _execute_ssh_fallback(
+                server=server,
+                command=command,
+                args=args,
+                timeout_seconds=job.timeout_seconds,
+                reason=str(exc),
+            )
+    else:
         response = await _execute_ssh_fallback(
             server=server,
             command=command,
             args=args,
             timeout_seconds=job.timeout_seconds,
-            reason=str(exc),
+            reason="No raw agent token was available for this command",
         )
 
     # Persist log lines
@@ -342,15 +345,22 @@ def _ssh_fallback_command(command: str, args: dict) -> str | None:
         import base64
 
         encoded = base64.b64encode(compose.encode()).decode()
+        prepare_dirs = _compose_prepare_dirs(args)
         return (
             "set -e; export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none; "
-            f"mkdir -p {_shell_quote(install_path)}; "
+            f"mkdir -p {_shell_quote(install_path)} {prepare_dirs}; "
             f"printf %s {_shell_quote(encoded)} | base64 -d > {_shell_quote(install_path)}/docker-compose.yml; "
             f"docker compose -f {_shell_quote(install_path)}/docker-compose.yml up -d --pull always"
         )
     if command == "docker_compose_down":
         install_path = str(args.get("install_path") or "/opt/devops-plugin")
         return f"docker compose -f {_shell_quote(install_path)}/docker-compose.yml down --remove-orphans"
+    if command == "docker_compose_restart":
+        install_path = str(args.get("install_path") or "/opt/devops-plugin")
+        return f"docker compose -f {_shell_quote(install_path)}/docker-compose.yml restart"
+    if command == "docker_compose_logs":
+        install_path = str(args.get("install_path") or "/opt/devops-plugin")
+        return f"docker compose -f {_shell_quote(install_path)}/docker-compose.yml logs --tail 200"
     if command == "plugin_uninstall":
         plugin_id = str(args.get("plugin_id") or "devops-plugin")
         install_path = str(args.get("install_path") or f"/opt/{plugin_id}")
@@ -462,6 +472,21 @@ def _ssh_fallback_command(command: str, args: dict) -> str | None:
             )
         return "nginx -t; systemctl reload nginx"
     return None
+
+
+def _compose_prepare_dirs(args: dict) -> str:
+    config = args.get("config") or {}
+    candidates = [
+        config.get("jenkins_home"),
+        f"{args.get('install_path') or '/opt/devops-plugin'}/data",
+        f"{config.get('install_path')}/data" if config.get("install_path") else None,
+    ]
+    dirs = []
+    for item in candidates:
+        text = str(item or "").strip()
+        if text.startswith("/") and "\n" not in text:
+            dirs.append(_shell_quote(text))
+    return " ".join(dict.fromkeys(dirs))
 
 
 async def _handle_plugin_install(db, job) -> dict:

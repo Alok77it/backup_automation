@@ -67,6 +67,8 @@ COMMAND_WHITELIST: frozenset[str] = frozenset({
     "plugin_uninstall",
     "docker_compose_up",
     "docker_compose_down",
+    "docker_compose_restart",
+    "docker_compose_logs",
     "package_install",
     "github_repo_run",
     "ssl_certbot_issue",

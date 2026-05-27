@@ -13,7 +13,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
 from app.core.security import decrypt_secret
@@ -77,6 +77,13 @@ class PluginInstallRequest(BaseModel):
     agent_port: int = 9977
 
 
+class PluginManageRequest(BaseModel):
+    action: str
+    agent_token_raw: str | None = None
+    agent_credential_id: uuid.UUID | None = None
+    agent_port: int = 9977
+
+
 class PluginInstallOut(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
@@ -92,6 +99,45 @@ class PluginInstallOut(BaseModel):
     job_id: uuid.UUID | None = None
 
     model_config = {"from_attributes": True}
+
+
+async def _resolve_agent_token(
+    db: DbSession,
+    *,
+    organization_id: uuid.UUID,
+    server_id: uuid.UUID,
+    raw_token: str | None = None,
+    credential_id: uuid.UUID | None = None,
+) -> str | None:
+    if raw_token:
+        return raw_token
+    if credential_id:
+        _, token = await _credential_secret(
+            db,
+            organization_id=organization_id,
+            credential_id=credential_id,
+            provider="agent",
+        )
+        return token
+    result = await db.execute(
+        select(StoredCredential).where(
+            StoredCredential.organization_id == organization_id,
+            StoredCredential.provider == "agent",
+            StoredCredential.is_active == True,
+            or_(StoredCredential.server_id == server_id, StoredCredential.server_id == None),
+        )
+    )
+    cred = result.scalars().first()
+    return decrypt_secret(cred.encrypted_secret) if cred else None
+
+
+def _render_compose(plugin_id: str, config: dict[str, Any]) -> str | None:
+    template = plugin_manager.get_compose_template(plugin_id)
+    if not template:
+        return None
+    from jinja2 import Template
+
+    return Template(template).render(**config)
 
 
 @router.get("/catalog", response_model=list[PluginOut])
@@ -174,14 +220,13 @@ async def install_plugin(
             ip_address=request.client.host if request.client else None,
         )
 
-        agent_token = body.agent_token_raw
-        if not agent_token and body.agent_credential_id:
-            _, agent_token = await _credential_secret(
-                db,
-                organization_id=membership.organization_id,
-                credential_id=body.agent_credential_id,
-                provider="agent",
-            )
+        agent_token = await _resolve_agent_token(
+            db,
+            organization_id=membership.organization_id,
+            server_id=body.server_id,
+            raw_token=body.agent_token_raw,
+            credential_id=body.agent_credential_id,
+        )
         if body.docker_credential_id:
             docker_cred, docker_token = await _credential_secret(
                 db,
@@ -301,6 +346,19 @@ async def uninstall_plugin(
 
     install.status = PluginStatus.UNINSTALLING
     await db.commit()
+    agent_token = await _resolve_agent_token(
+        db,
+        organization_id=membership.organization_id,
+        server_id=server_id,
+    )
+    payload = {
+        "installation_id": str(install.id),
+        "plugin_id": plugin_id,
+        "command": "plugin_uninstall",
+        "args": {"plugin_id": plugin_id, "install_path": install.install_path or f"/opt/{plugin_id}"},
+    }
+    if agent_token:
+        payload["_agent_token_raw"] = agent_token
 
     job = await execution_engine.submit_job(
         db,
@@ -309,17 +367,99 @@ async def uninstall_plugin(
         created_by=membership.user_id,
         job_type="plugin_uninstall",
         plugin_id=plugin_id,
-        payload={
-            "installation_id": str(install.id),
-            "plugin_id": plugin_id,
-            "command": "plugin_uninstall",
-            "args": {"plugin_id": plugin_id},
-        },
-        risk_level=RiskLevel.HIGH,
+        payload=payload,
+        risk_level=RiskLevel.MEDIUM,
         timeout_seconds=300,
         ip_address=request.client.host if request.client else None,
     )
     return {"message": "Uninstall job submitted", "job_id": str(job.id), "approval_id": str(job.approval_id)}
+
+
+@router.post(
+    "/{plugin_id}/manage/{server_id}",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(verify_csrf)],
+)
+async def manage_plugin(
+    plugin_id: str,
+    server_id: uuid.UUID,
+    body: PluginManageRequest,
+    db: DbSession,
+    request: Request,
+    membership: Annotated[
+        OrganizationMember,
+        Depends(require_permission("server:write"))
+    ],
+):
+    action = body.action.strip().lower()
+    if action not in {"start", "redeploy", "restart", "stop", "logs"}:
+        raise HTTPException(status_code=400, detail="Unsupported plugin action")
+
+    result = await db.execute(
+        select(PluginInstallation).where(
+            PluginInstallation.plugin_id == plugin_id,
+            PluginInstallation.server_id == server_id,
+            PluginInstallation.organization_id == membership.organization_id,
+        )
+    )
+    install = result.scalar_one_or_none()
+    if not install:
+        raise HTTPException(status_code=404, detail="Plugin installation not found")
+
+    config = dict(install.config or {})
+    server = await db.get(Server, server_id)
+    if server:
+        config.setdefault("public_ip", config.get("public_ip") or server.hostname)
+        config.setdefault("server_hostname", config.get("server_hostname") or server.hostname)
+    install_path = install.install_path or config.get("install_path") or f"/opt/{plugin_id}"
+    compose_content = _render_compose(plugin_id, config)
+    if not compose_content and action in {"start", "redeploy", "restart", "stop", "logs"}:
+        raise HTTPException(status_code=400, detail="This plugin does not expose Docker Compose management actions")
+    command = {
+        "start": "docker_compose_up",
+        "redeploy": "docker_compose_up",
+        "restart": "docker_compose_restart",
+        "stop": "docker_compose_down",
+        "logs": "docker_compose_logs",
+    }[action]
+    args: dict[str, Any] = {
+        "plugin_id": plugin_id,
+        "config": config,
+        "install_path": install_path,
+    }
+    if compose_content and action in {"start", "redeploy"}:
+        args["compose_content"] = compose_content
+
+    agent_token = await _resolve_agent_token(
+        db,
+        organization_id=membership.organization_id,
+        server_id=server_id,
+        raw_token=body.agent_token_raw,
+        credential_id=body.agent_credential_id,
+    )
+    payload = {
+        "installation_id": str(install.id),
+        "plugin_id": plugin_id,
+        "command": command,
+        "args": args,
+        "agent_port": body.agent_port,
+    }
+    if agent_token:
+        payload["_agent_token_raw"] = agent_token
+
+    job = await execution_engine.submit_job(
+        db,
+        organization_id=membership.organization_id,
+        server_id=server_id,
+        created_by=membership.user_id,
+        job_type="agent_command",
+        plugin_id=plugin_id,
+        payload=payload,
+        risk_level=RiskLevel.MEDIUM,
+        timeout_seconds=900 if action in {"start", "redeploy"} else 180,
+        ip_address=request.client.host if request.client else None,
+    )
+    return {"message": f"{action} job submitted", "job_id": str(job.id)}
 
 
 @router.get("/{plugin_id}/installations/{server_id}", response_model=PluginInstallOut)

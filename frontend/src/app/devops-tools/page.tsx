@@ -12,8 +12,11 @@ import {
   Package,
   Play,
   Plus,
+  RotateCw,
+  ScrollText,
   Server,
   Settings2,
+  Square,
   Trash2,
   Wrench,
 } from "lucide-react";
@@ -919,8 +922,21 @@ function InstallWizard({
 
 // ── Installations status ──────────────────────────────────────────────────────
 
-function InstallationsPanel({ installations, servers, filterServerId }: { installations: PluginInstallation[]; servers: ServerType[]; filterServerId: string; }) {
+function InstallationsPanel({
+  installations,
+  servers,
+  filterServerId,
+  onRefresh,
+}: {
+  installations: PluginInstallation[];
+  servers: ServerType[];
+  filterServerId: string;
+  onRefresh?: () => void;
+}) {
   const visible = filterServerId ? installations.filter((i) => i.server_id === filterServerId) : installations;
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   if (visible.length === 0) return null;
 
   const statusIcon = (s: string) => {
@@ -938,6 +954,39 @@ function InstallationsPanel({ installations, servers, filterServerId }: { instal
     return null;
   };
 
+  async function manage(inst: PluginInstallation, action: "start" | "redeploy" | "restart" | "stop" | "logs") {
+    setBusyId(`${inst.id}:${action}`);
+    setError("");
+    setMessage("");
+    try {
+      await api(`/plugins/${inst.plugin_id}/manage/${inst.server_id}`, {
+        method: "POST",
+        body: JSON.stringify({ action }),
+      });
+      setMessage(`${action === "logs" ? "Logs fetch" : action} job submitted. Check Logs -> Job Logs for output.`);
+      onRefresh?.();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Tool action failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function uninstall(inst: PluginInstallation) {
+    setBusyId(`${inst.id}:uninstall`);
+    setError("");
+    setMessage("");
+    try {
+      await api(`/plugins/${inst.plugin_id}/uninstall/${inst.server_id}`, { method: "POST" });
+      setMessage("Uninstall job submitted. Check Logs -> Job Logs for output.");
+      onRefresh?.();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Uninstall failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -946,11 +995,14 @@ function InstallationsPanel({ installations, servers, filterServerId }: { instal
         </CardTitle>
       </CardHeader>
       <CardContent>
+        {error && <div className="mb-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">{error}</div>}
+        {message && <div className="mb-3 rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">{message}</div>}
         <div className="divide-y">
           {visible.map((inst) => {
             const tool = TOOLS.find((t) => t.id === inst.plugin_id);
             const srv = servers.find((s) => s.id === inst.server_id);
             const accessUrl = inst.access_url || fallbackAccessUrl(inst);
+            const isComposeManaged = ["jenkins", "n8n", "github_runner"].includes(inst.plugin_id);
             return (
               <div key={inst.id} className="flex items-center justify-between py-3 gap-3">
                 <div className="flex items-center gap-3">
@@ -969,6 +1021,34 @@ function InstallationsPanel({ installations, servers, filterServerId }: { instal
                       Open <ExternalLink className="h-3 w-3" />
                     </a>
                   )}
+                  {isComposeManaged && (
+                    <>
+                      <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => manage(inst, "start")} disabled={!!busyId}>
+                        {busyId === `${inst.id}:start` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                        Start
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => manage(inst, "restart")} disabled={!!busyId}>
+                        {busyId === `${inst.id}:restart` ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCw className="h-3 w-3" />}
+                        Restart
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => manage(inst, "redeploy")} disabled={!!busyId}>
+                        {busyId === `${inst.id}:redeploy` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                        Redeploy
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => manage(inst, "logs")} disabled={!!busyId}>
+                        {busyId === `${inst.id}:logs` ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScrollText className="h-3 w-3" />}
+                        Logs
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => manage(inst, "stop")} disabled={!!busyId}>
+                        {busyId === `${inst.id}:stop` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Square className="h-3 w-3" />}
+                        Stop
+                      </Button>
+                    </>
+                  )}
+                  <Button size="sm" variant="outline" className="h-8 gap-1 text-red-600" onClick={() => uninstall(inst)} disabled={!!busyId}>
+                    {busyId === `${inst.id}:uninstall` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                    Remove
+                  </Button>
                 </div>
               </div>
             );
@@ -1328,6 +1408,7 @@ export default function DevOpsToolsPage() {
                     installations={installations}
                     servers={servers}
                     filterServerId={filterServer}
+                    onRefresh={loadAll}
                   />
                 )}
               </div>
