@@ -58,7 +58,9 @@ POSTGRES_DB=backup_intelligence
 BACKUP_STORAGE_PATH=/data/backups
 FRONTEND_URL=http://YOUR_SERVER_IP
 API_URL=http://YOUR_SERVER_IP/api
-CORS_ORIGINS=http://YOUR_SERVER_IP,http://localhost,http://localhost:3000
+CORS_ORIGINS=http://YOUR_SERVER_IP
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
 ```
 
 ## Run With Welcome Enabled
