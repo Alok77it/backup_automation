@@ -1,0 +1,9 @@
+services:
+  frontend:
+    build:
+      args:
+        DISABLE_WELCOME: "true"
+        NEXT_PUBLIC_DISABLE_WELCOME: "true"
+    environment:
+      DISABLE_WELCOME: "true"
+      NEXT_PUBLIC_DISABLE_WELCOME: "true"
