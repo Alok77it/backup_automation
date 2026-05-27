@@ -540,7 +540,7 @@ export default function DatabaseBackupPage() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Storage Path (optional)</label>
-                      <Input placeholder="/backups/databases  or  leave blank"
+                      <Input placeholder="/data/backups/server-name/database-name  or leave blank"
                         value={form.target_path}
                         onChange={(e) => setForm({ ...form, target_path: e.target.value })} />
                     </div>
@@ -580,7 +580,7 @@ export default function DatabaseBackupPage() {
         <div className="py-20 text-center">
           <Database className="mx-auto h-12 w-12 text-[#f36458] mb-4" />
           <p className="text-muted-foreground">No database backups yet.</p>
-          <p className="text-sm text-muted-foreground mt-1">Click "New Database Backup" to dump your first database.</p>
+          <p className="text-sm text-muted-foreground mt-1">Click &quot;New Database Backup&quot; to dump your first database.</p>
         </div>
       ) : (
         <div className="rounded-2xl border border-[#353535] bg-[#212121] overflow-hidden">
@@ -670,7 +670,7 @@ export default function DatabaseBackupPage() {
                               <p className="font-semibold text-gray-600 mb-1">Details</p>
                               <div className="bg-white rounded-lg border border-gray-100 p-3 space-y-1">
                                 <p><span className="text-gray-400">Run ID:</span> <code>{j.id}</code></p>
-                                <p><span className="text-gray-400">Storage path:</span> {meta.target_path || "/opt/backups (default)"}</p>
+                                <p><span className="text-gray-400">Storage path:</span> {meta.dump_file || meta.storage_dir || meta.target_path || "/data/backups (default)"}</p>
                                 {j.error_message && (
                                   <p className="text-red-600"><span className="text-gray-400">Error:</span> {j.error_message}</p>
                                 )}

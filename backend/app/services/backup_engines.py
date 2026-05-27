@@ -1,6 +1,9 @@
 import logging
 import os
+import gzip
+import shutil
 import subprocess
+import tarfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -159,12 +162,31 @@ def run_rsync_backup(
             pass  # non-critical
 
     duration = time.monotonic() - start
+    snapshot_id = f"files-{int(start)}.tar.gz" if compression else f"files-{int(start)}"
+    if success and compression:
+        archive_path = os.path.join(target_path, snapshot_id)
+        with tarfile.open(archive_path, "w:gz") as tar:
+            for item in os.listdir(target_path):
+                item_path = os.path.join(target_path, item)
+                if item == snapshot_id or item == "latest":
+                    continue
+                tar.add(item_path, arcname=item)
+        for item in os.listdir(target_path):
+            item_path = os.path.join(target_path, item)
+            if item == snapshot_id or item == "latest":
+                continue
+            if os.path.isdir(item_path) and not os.path.islink(item_path):
+                shutil.rmtree(item_path)
+            elif os.path.exists(item_path):
+                os.unlink(item_path)
+        total_bytes = os.path.getsize(archive_path) if os.path.exists(archive_path) else total_bytes
+
     return BackupResult(
         success=success,
         bytes_processed=total_bytes,
         bytes_added=total_bytes,
         duration_seconds=duration,
-        snapshot_id=f"rsync-{int(start)}",
+        snapshot_id=snapshot_id,
         checksum_valid=success,
         failed_chunks=0 if success else len(source_paths),
         log_output="\n".join(logs),
@@ -195,8 +217,23 @@ def restore_rsync(
         ssh_key_path: SSH private key for remote restore.
         ssh_password: SSH password — used with sshpass when no key is set.
     """
+    import tempfile
+
     start = time.monotonic()
-    os.makedirs(target_path, exist_ok=True)
+    if not remote:
+        os.makedirs(target_path, exist_ok=True)
+    temp_dir: str | None = None
+    source_path = backup_path
+    if os.path.isfile(backup_path) and backup_path.endswith((".tar.gz", ".tgz")):
+        temp_dir = tempfile.mkdtemp(prefix="backup-restore-")
+        with tarfile.open(backup_path, "r:gz") as tar:
+            root = os.path.realpath(temp_dir)
+            for member in tar.getmembers():
+                member_path = os.path.realpath(os.path.join(root, member.name))
+                if not member_path.startswith(root + os.sep):
+                    raise RuntimeError(f"Unsafe archive member: {member.name}")
+            tar.extractall(temp_dir)
+        source_path = temp_dir
 
     ssh_opts: list[str] = []
     ssh_env: dict = {}
@@ -210,11 +247,15 @@ def restore_rsync(
         cmd.extend(ssh_opts)
 
     if remote:
-        cmd.extend([backup_path + "/", f"{remote}:{target_path}/"])
+        cmd.extend([source_path + "/", f"{remote}:{target_path}/"])
     else:
-        cmd.extend([backup_path + "/", target_path + "/"])
+        cmd.extend([source_path + "/", target_path + "/"])
 
-    code, output, _ = _run_command(cmd, env=ssh_env or None)
+    try:
+        code, output, _ = _run_command(cmd, env=ssh_env or None)
+    finally:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
     duration = time.monotonic() - start
     total_bytes = _parse_rsync_bytes(output)
 
@@ -294,6 +335,13 @@ def run_database_backup(
     import tempfile
     start = time.monotonic()
     os.makedirs(os.path.dirname(target_file) if os.path.dirname(target_file) else ".", exist_ok=True)
+    final_target_file = target_file
+    compress_output = target_file.endswith(".gz")
+    if compress_output:
+        raw_suffix = "".join(Path(target_file[:-3]).suffixes) or ".dump"
+        tmp = tempfile.NamedTemporaryFile(suffix=raw_suffix, delete=False)
+        tmp.close()
+        target_file = tmp.name
 
     def _build_pg_cmd() -> list[str]:
         cmd = ["pg_dump"]
@@ -422,6 +470,12 @@ def run_database_backup(
         code = result.returncode
         output = result.stdout + result.stderr
 
+    if compress_output and code == 0 and os.path.exists(target_file):
+        with open(target_file, "rb") as src, gzip.open(final_target_file, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        os.unlink(target_file)
+        target_file = final_target_file
+
     duration = time.monotonic() - start
     size = os.path.getsize(target_file) if os.path.exists(target_file) else 0
     # Sanitize log output — strip any secrets that may appear
@@ -535,12 +589,24 @@ def run_database_restore(
     If ssh_remote is set, streams the dump file into the remote DB via SSH pipe.
     """
     import subprocess
+    import tempfile
     start = time.monotonic()
 
     if not os.path.exists(dump_file):
         return BackupResult(False, 0, 0, 0, None, False, 1, "", f"Dump file not found: {dump_file}")
 
     dump_size = os.path.getsize(dump_file)
+    temp_dump: str | None = None
+    restore_file = dump_file
+    if dump_file.endswith(".gz"):
+        suffixes = Path(dump_file[:-3]).suffixes
+        suffix = "".join(suffixes) or ".dump"
+        tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+        tmp.close()
+        with gzip.open(dump_file, "rb") as src, open(tmp.name, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        temp_dump = tmp.name
+        restore_file = tmp.name
     code = 1
     output = ""
 
@@ -561,7 +627,7 @@ def run_database_restore(
             if db_password:
                 remote_cmd = f"PGPASSWORD={repr(db_password)} {remote_cmd}"
 
-            with open(dump_file, "rb") as dump_f:
+            with open(restore_file, "rb") as dump_f:
                 proc = subprocess.run(
                     ssh_parts + [remote_cmd],
                     stdin=dump_f,
@@ -584,7 +650,7 @@ def run_database_restore(
             remote_parts += [db_name or ""]
             remote_cmd = " ".join(remote_parts)
 
-            with open(dump_file, "rb") as dump_f:
+            with open(restore_file, "rb") as dump_f:
                 proc = subprocess.run(
                     ssh_parts + [remote_cmd],
                     stdin=dump_f,
@@ -607,7 +673,7 @@ def run_database_restore(
             # Copy archive to remote first, then mongorestore
             scp_parts = _build_ssh_prefix(ssh_key_path, ssh_password, ssh_remote)
             # Use cat + ssh to pipe file to remote tmp
-            with open(dump_file, "rb") as dump_f:
+            with open(restore_file, "rb") as dump_f:
                 copy_proc = subprocess.run(
                     ssh_parts + [f"cat > {archive_remote}"],
                     stdin=dump_f,
@@ -643,7 +709,7 @@ def run_database_restore(
                 cmd += ["-p", str(db_port)]
             if db_user:
                 cmd += ["-U", db_user]
-            cmd.append(dump_file)
+            cmd.append(restore_file)
 
         elif db_type in ("mysql", "mariadb"):
             cmd = ["mysql"]
@@ -658,7 +724,7 @@ def run_database_restore(
             cmd += [db_name or ""]
             # mysql reads from stdin
             env = {**os.environ, **env_extra}
-            with open(dump_file, "rb") as dump_f:
+            with open(restore_file, "rb") as dump_f:
                 result_proc = subprocess.run(
                     cmd, stdin=dump_f, capture_output=True, text=True, timeout=7200, env=env
                 )
@@ -686,7 +752,7 @@ def run_database_restore(
             mongo_host = db_host or "localhost"
             mongo_port_str = f":{db_port}" if db_port else ""
             mongo_uri = f"mongodb://{mongo_auth}{mongo_host}{mongo_port_str}/{db_name or ''}"
-            cmd = ["mongorestore", "--uri", mongo_uri, f"--archive={dump_file}", "--drop"]
+            cmd = ["mongorestore", "--uri", mongo_uri, f"--archive={restore_file}", "--drop"]
 
         else:
             return BackupResult(False, 0, 0, 0, None, False, 1, "", f"Unsupported database type: {db_type}")
@@ -695,6 +761,9 @@ def run_database_restore(
         result_proc = subprocess.run(cmd, capture_output=True, text=True, timeout=7200, env=env)
         code = result_proc.returncode
         output = result_proc.stdout + result_proc.stderr
+
+    if temp_dump:
+        os.unlink(temp_dump)
 
     duration = time.monotonic() - start
     safe_output = _sanitize_log(output or "", [db_password, ssh_password])

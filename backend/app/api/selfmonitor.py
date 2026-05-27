@@ -107,8 +107,8 @@ async def storage_paths(
     """Return disk usage for backup storage paths."""
     paths = []
 
-    backup_path = getattr(settings, "BACKUP_STORAGE_PATH", "/opt/backups")
-    for path in [backup_path, "/opt/backups", "/var/lib/backup", "/backups"]:
+    backup_path = getattr(settings, "BACKUP_STORAGE_PATH", "/data/backups")
+    for path in [backup_path, "/data/backups", "/var/lib/backup", "/backups"]:
         if path and os.path.exists(path):
             try:
                 usage = shutil.disk_usage(path)

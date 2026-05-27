@@ -229,13 +229,15 @@ async def create_db_restore(
     if run.status.value != "completed":
         raise HTTPException(status_code=400, detail=f"Backup run is {run.status.value}, not completed")
 
-    # Locate the dump file — snapshot_id holds the filename
+    # Locate the dump file. Newer runs store the exact path in metadata_json;
+    # older runs only have snapshot_id under backup.target_path.
     backup = await db.get(Backup, run.backup_id)
     if not backup or not backup.target_path:
         raise HTTPException(status_code=404, detail="Backup record missing target path")
 
-    # snapshot_id is the basename of the dump file set in backup_engines.py
-    dump_file = os.path.join(backup.target_path, run.snapshot_id) if run.snapshot_id else None
+    dump_file = (run.metadata_json or {}).get("dump_file") if run.metadata_json else None
+    if not dump_file and run.snapshot_id:
+        dump_file = os.path.join(backup.target_path, run.snapshot_id)
     if not dump_file:
         raise HTTPException(status_code=400, detail="Dump file path could not be determined")
 

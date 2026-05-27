@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -33,6 +34,46 @@ from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+def _slugify_path(value: str | None, fallback: str = "server") -> str:
+    text = (value or fallback).strip().lower()
+    text = re.sub(r"[^a-z0-9._-]+", "-", text).strip("-._")
+    return text[:80] or fallback
+
+
+def _server_storage_name(server: Server | None) -> str:
+    if not server:
+        return "local-server"
+    return _slugify_path(server.name or server.hostname or str(server.id), "server")
+
+
+def _backup_storage_name(backup: Backup) -> str:
+    return _slugify_path(backup.name or str(backup.id), "backup")
+
+
+def _run_storage_dir(backup: Backup, run: BackupRun, server: Server | None) -> str:
+    started = run.started_at or datetime.now(timezone.utc)
+    stamp = started.strftime("%Y%m%d-%H%M%S")
+    return os.path.join(
+        settings.BACKUP_STORAGE_PATH,
+        _server_storage_name(server),
+        _backup_storage_name(backup),
+        f"{stamp}-{str(run.id)[:8]}",
+    )
+
+
+def _resolve_run_backup_path(backup: Backup, run: BackupRun | None) -> str | None:
+    if run and run.metadata_json:
+        for key in ("archive_path", "dump_file", "snapshot_path"):
+            value = run.metadata_json.get(key)
+            if value:
+                return str(value)
+    if run and run.snapshot_id and backup.target_path:
+        candidate = os.path.join(backup.target_path, run.snapshot_id)
+        if os.path.exists(candidate):
+            return candidate
+    return backup.target_path
 
 
 def _apply_retention(session: Session, backup: "Backup") -> None:
@@ -86,19 +127,19 @@ def _apply_retention(session: Session, backup: "Backup") -> None:
     deleted_ids = []
     for run in to_delete:
         # Best-effort: remove per-run snapshot directory if it exists
-        if run.snapshot_id:
-            snap_dir = os.path.join(
-                settings.BACKUP_STORAGE_PATH,
-                str(backup.organization_id),
-                str(backup.id),
-                str(run.snapshot_id),
-            )
-            if os.path.isdir(snap_dir):
-                import shutil
-                try:
-                    shutil.rmtree(snap_dir)
-                except Exception as exc:
-                    logger.warning("Could not remove snapshot dir %s: %s", snap_dir, exc)
+        snap_path = _resolve_run_backup_path(backup, run)
+        storage_dir = (run.metadata_json or {}).get("storage_dir") if run.metadata_json else None
+        for path in [snap_path, storage_dir]:
+            if not path or not os.path.exists(path):
+                continue
+            import shutil
+            try:
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                else:
+                    os.unlink(path)
+            except Exception as exc:
+                logger.warning("Could not remove backup artifact %s: %s", path, exc)
         session.delete(run)
         deleted_ids.append(str(run.id))
 
@@ -138,15 +179,14 @@ def execute_backup_run(self, run_id: str) -> dict:
         run.celery_task_id = self.request.id
         session.commit()
 
-        org_path = os.path.join(settings.BACKUP_STORAGE_PATH, str(backup.organization_id))
-        target = backup.target_path or os.path.join(org_path, str(backup.id))
+        server = session.get(Server, backup.server_id) if backup.server_id else None
+        target = _run_storage_dir(backup, run, server)
         os.makedirs(target, exist_ok=True)
 
         config = backup.config_json or {}
         sources = backup.source_paths or ["/tmp"]
         passphrase = config.get("encryption_password", settings.ENCRYPTION_KEY[:32])
 
-        server = session.get(Server, backup.server_id) if backup.server_id else None
         remote = None
         password = None
         private_key = None
@@ -176,7 +216,10 @@ def execute_backup_run(self, run_id: str) -> dict:
                 db_ext = {"postgresql": ".pgdump", "mysql": ".sql", "mariadb": ".sql", "mongodb": ".archive"}.get(
                     config.get("db_type", "postgresql"), ".dump"
                 )
-                dump_file = os.path.join(target, f"db-{run.id}{db_ext}")
+                if backup.compression:
+                    db_ext += ".gz"
+                db_name = _slugify_path(config.get("db_name") or "database", "database")
+                dump_file = os.path.join(target, f"{db_name}-{str(run.id)[:8]}{db_ext}")
                 # Decrypt the DB password — never stored plaintext
                 _enc_pw = config.get("db_password_enc", "")
                 _db_password = decrypt_secret(_enc_pw) if _enc_pw else config.get("db_password", "")
@@ -259,6 +302,14 @@ def execute_backup_run(self, run_id: str) -> dict:
         run.checksum_valid = result.checksum_valid
         run.failed_chunks = result.failed_chunks
         run.snapshot_id = result.snapshot_id
+        run.metadata_json = {
+            **(run.metadata_json or {}),
+            "server_name": server.name if server else "local-server",
+            "storage_dir": target,
+            "snapshot_path": os.path.join(target, result.snapshot_id) if result.snapshot_id else target,
+            "archive_path": os.path.join(target, result.snapshot_id) if result.snapshot_id and str(result.snapshot_id).endswith((".tar.gz", ".tgz")) else None,
+            "dump_file": os.path.join(target, result.snapshot_id) if result.snapshot_id and backup.backup_type == BackupType.DATABASE else None,
+        }
         run.log_output = result.log_output
         run.error_message = result.error_message
         session.commit()
@@ -318,13 +369,6 @@ def execute_restore_job(self, job_id: str) -> dict:
         job.celery_task_id = self.request.id
         session.commit()
 
-        if job.overwrite_protection and os.path.exists(job.target_path) and os.listdir(job.target_path):
-            job.status = JobStatus.FAILED
-            job.error_message = "Target path not empty and overwrite protection enabled"
-            job.completed_at = datetime.now(timezone.utc)
-            session.commit()
-            return {"status": "failed", "reason": "overwrite_protection"}
-
         config = backup.config_json or {}
 
         # Resolve server credentials for remote restore (push back to source server)
@@ -344,7 +388,25 @@ def execute_restore_job(self, job_id: str) -> dict:
                 ssh_key_path = kf.name
             remote = f"{server.username}@{server.hostname}"
 
-        backup_source = backup.target_path
+        if not remote and job.overwrite_protection and os.path.exists(job.target_path) and os.listdir(job.target_path):
+            job.status = JobStatus.FAILED
+            job.error_message = "Target path not empty and overwrite protection enabled"
+            job.completed_at = datetime.now(timezone.utc)
+            session.commit()
+            return {"status": "failed", "reason": "overwrite_protection"}
+
+        selected_run = session.get(BackupRun, job.backup_run_id) if job.backup_run_id else None
+        if not selected_run:
+            selected_run = (
+                session.execute(
+                    select(BackupRun)
+                    .where(BackupRun.backup_id == backup.id, BackupRun.status == JobStatus.COMPLETED)
+                    .order_by(BackupRun.started_at.desc())
+                    .limit(1)
+                )
+                .scalar_one_or_none()
+            )
+        backup_source = _resolve_run_backup_path(backup, selected_run)
         if not backup_source or not os.path.exists(backup_source):
             job.status = JobStatus.FAILED
             job.error_message = "Backup source path not found"

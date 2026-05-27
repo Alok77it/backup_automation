@@ -273,10 +273,10 @@ export default function BackupsPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Destination Path (optional)</label>
-                      <Input placeholder="/backups/production  or  leave blank for auto"
+                      <Input placeholder="/data/backups/server-name/backup-name  or leave blank"
                         value={form.target_path}
                         onChange={(e) => setForm({ ...form, target_path: e.target.value })} />
-                      <p className="text-xs text-gray-500 mt-1">Where backup files are stored. Blank = default path.</p>
+                      <p className="text-xs text-gray-500 mt-1">Blank = /data/backups/server-name/backup-name.</p>
                     </div>
                   </div>
 
@@ -438,7 +438,7 @@ export default function BackupsPage() {
                           <div>
                             <p className="font-semibold text-[#f36458] mb-1">Storage</p>
                             <p className="font-mono text-xs text-gray-600 bg-[#212121] rounded px-2 py-1 border border-[#353535]">
-                              {b.target_path || "/opt/backups (this server)"}
+                              {b.target_path || "/data/backups (this server)"}
                             </p>
                             {b.destination_server_name && (
                               <p className="text-xs text-[#f36458] mt-1 font-medium">→ Also pushed to: <strong>{b.destination_server_name}</strong></p>

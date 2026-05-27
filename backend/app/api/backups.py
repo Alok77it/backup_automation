@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 from typing import Annotated
 
@@ -18,6 +19,23 @@ from app.workers.backup_tasks import execute_backup_run
 
 router = APIRouter(prefix="/backups", tags=["backups"])
 settings = get_settings()
+
+
+def _slugify_path(value: str | None, fallback: str = "item") -> str:
+    text = (value or fallback).strip().lower()
+    text = re.sub(r"[^a-z0-9._-]+", "-", text).strip("-._")
+    return text[:80] or fallback
+
+
+async def _default_backup_target(db, server_id: uuid.UUID | None, backup_name: str) -> str:
+    server_part = "local-server"
+    if server_id:
+        from app.models.entities import Server
+
+        server = await db.get(Server, server_id)
+        if server:
+            server_part = _slugify_path(server.name or server.hostname or str(server.id), "server")
+    return os.path.join(settings.BACKUP_STORAGE_PATH, server_part, _slugify_path(backup_name, "backup"))
 
 
 async def _backup_response(db, backup: Backup) -> BackupResponse:
@@ -85,6 +103,8 @@ async def list_database_backup_jobs(
             "db_name": cfg.get("db_name", ""),
             "db_host": cfg.get("db_host", ""),
             "target_path": backup.target_path,
+            "storage_dir": (run.metadata_json or {}).get("storage_dir"),
+            "dump_file": (run.metadata_json or {}).get("dump_file"),
         })
         items.append(r)
     return items
@@ -129,7 +149,11 @@ async def list_all_runs(
             if r.metadata_json is None:
                 r.metadata_json = {}
             r.metadata_json["backup_name"] = backup_obj.name
-            r.metadata_json["server_name"] = backup_obj.server_id and str(backup_obj.server_id)
+            if backup_obj.server_id:
+                from app.models.entities import Server
+
+                server = await db.get(Server, backup_obj.server_id)
+                r.metadata_json["server_name"] = server.name if server else str(backup_obj.server_id)
         responses.append(r)
     return responses
 
@@ -153,8 +177,7 @@ async def run_database_backup_direct(
     # Encrypt password before persisting — never store plaintext credentials
     encrypted_pw = encrypt_secret(data.db_password) if data.db_password else ""
 
-    import os as _os
-    default_target = _os.path.join(settings.BACKUP_STORAGE_PATH, str(membership.organization_id), "database")
+    default_target = await _default_backup_target(db, data.server_id, backup_name)
     backup = Backup(
         organization_id=membership.organization_id,
         server_id=data.server_id,
@@ -222,8 +245,7 @@ async def create_backup(
 ):
     from app.models.entities import BackupEngine, BackupType
 
-    org_path = os.path.join(settings.BACKUP_STORAGE_PATH, str(membership.organization_id))
-    target = data.target_path or os.path.join(org_path, data.name.replace(" ", "-").lower())
+    target = data.target_path or await _default_backup_target(db, data.server_id, data.name)
 
     backup = Backup(
         organization_id=membership.organization_id,
