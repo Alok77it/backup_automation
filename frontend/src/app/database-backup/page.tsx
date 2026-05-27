@@ -43,7 +43,7 @@ const DB_TYPES = [
 ];
 
 function StatusIcon({ status }: { status: string }) {
-  if (status === "completed") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+  if (status === "completed") return <CheckCircle2 className="h-4 w-4 text-[#f36458]" />;
   if (status === "failed")    return <XCircle      className="h-4 w-4 text-red-500" />;
   if (status === "running")   return <Loader2      className="h-4 w-4 animate-spin text-blue-500" />;
   return <Clock className="h-4 w-4 text-amber-400" />;
@@ -112,8 +112,8 @@ function LiveProgress({ backupId, runId, initialStatus }: {
 
   if (status === "completed") return (
     <div className="mt-2">
-      <div className="flex justify-between text-xs text-emerald-600 mb-1"><span>✓ Complete</span><span>100%</span></div>
-      <div className="h-2 w-full rounded-full bg-emerald-100"><div className="h-2 rounded-full bg-emerald-500 w-full" /></div>
+      <div className="flex justify-between text-xs text-[#f36458] mb-1"><span>✓ Complete</span><span>100%</span></div>
+      <div className="h-2 w-full rounded-full bg-[#212121]"><div className="h-2 rounded-full bg-[#212121]0 w-full" /></div>
       {progress?.bytes_processed ? <p className="text-xs text-gray-400 mt-0.5">{formatBytes(progress.bytes_processed)} dumped</p> : null}
     </div>
   );
@@ -158,11 +158,11 @@ function RestoreProgress({ jobId, onDone }: { jobId: string; onDone: (ok: boolea
   const pct    = status === "completed" ? 100 : Math.min(90, elapsed / 120 * 60);
 
   if (status === "completed") return (
-    <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-700 flex items-center gap-2">
-      <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+    <div className="rounded-xl bg-[#212121] border border-[#353535] p-4 text-sm text-[#f36458] flex items-center gap-2">
+      <CheckCircle2 className="h-5 w-5 text-[#f36458]" />
       <div>
         <p className="font-semibold">Restore completed successfully!</p>
-        {progress?.log_tail && <pre className="mt-2 text-xs text-emerald-600 bg-emerald-100 rounded p-2 max-h-24 overflow-y-auto whitespace-pre-wrap">{progress.log_tail}</pre>}
+        {progress?.log_tail && <pre className="mt-2 text-xs text-[#f36458] bg-[#212121] rounded p-2 max-h-24 overflow-y-auto whitespace-pre-wrap">{progress.log_tail}</pre>}
       </div>
     </div>
   );
@@ -245,13 +245,13 @@ function RestoreModal({ run, servers, onClose }: {
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.96 }}
-        className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-emerald-100 overflow-hidden"
+        className="w-full max-w-2xl bg-[#212121] rounded-2xl shadow-2xl border border-[#353535] overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-emerald-100 flex items-center justify-center">
-              <RotateCcw className="h-5 w-5 text-emerald-600" />
+            <div className="h-9 w-9 rounded-xl bg-[#212121] flex items-center justify-center">
+              <RotateCcw className="h-5 w-5 text-[#f36458]" />
             </div>
             <div>
               <p className="font-semibold text-gray-800">Restore Database Backup</p>
@@ -306,7 +306,7 @@ function RestoreModal({ run, servers, onClose }: {
                   <div className="md:col-span-1">
                     <label className="block text-sm font-medium text-gray-700 mb-1">DB Type</label>
                     <select
-                      className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f36458]"
                       value={form.db_type} onChange={(e) => changeType(e.target.value)}
                     >
                       {DB_TYPES.map((d) => <option key={d.value} value={d.value}>{d.icon} {d.label}</option>)}
@@ -352,7 +352,7 @@ function RestoreModal({ run, servers, onClose }: {
               </div>
 
               <div className="flex gap-3 pt-1">
-                <Button type="submit" disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700">
+                <Button type="submit" disabled={submitting} className="bg-[#f36458] hover:bg-[#f36458]">
                   {submitting
                     ? <><Loader2 className="h-4 w-4 animate-spin" /> Starting…</>
                     : <><RotateCcw className="h-4 w-4" /> Start Restore</>
@@ -465,10 +465,10 @@ export default function DatabaseBackupPage() {
       <AnimatePresence>
         {showForm && (
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <Card className="mb-6 glass border-emerald-200">
+            <Card className="mb-6 glass border-[#353535]">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2">
-                  <Database className="h-5 w-5 text-emerald-600" /> Configure Database Backup
+                  <Database className="h-5 w-5 text-[#f36458]" /> Configure Database Backup
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -493,7 +493,7 @@ export default function DatabaseBackupPage() {
                       <div className="md:col-span-1">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Database Type *</label>
                         <select
-                          className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f36458]"
                           value={form.db_type} onChange={(e) => changeDbType(e.target.value)}>
                           {DB_TYPES.map((d) => <option key={d.value} value={d.value}>{d.icon} {d.label}</option>)}
                         </select>
@@ -544,11 +544,11 @@ export default function DatabaseBackupPage() {
                         value={form.target_path}
                         onChange={(e) => setForm({ ...form, target_path: e.target.value })} />
                     </div>
-                    <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3">
+                    <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-[#212121] px-4 py-3">
                       <label className="flex items-center gap-2 cursor-pointer text-sm">
                         <input type="checkbox" checked={form.compression}
                           onChange={(e) => setForm({ ...form, compression: e.target.checked })}
-                          className="h-4 w-4 rounded accent-emerald-600" />
+                          className="h-4 w-4 rounded accent-[#f36458]" />
                         Compress dump (gzip)
                       </label>
                     </div>
@@ -578,14 +578,14 @@ export default function DatabaseBackupPage() {
       {/* Jobs table */}
       {jobs.length === 0 ? (
         <div className="py-20 text-center">
-          <Database className="mx-auto h-12 w-12 text-emerald-200 mb-4" />
+          <Database className="mx-auto h-12 w-12 text-[#f36458] mb-4" />
           <p className="text-muted-foreground">No database backups yet.</p>
           <p className="text-sm text-muted-foreground mt-1">Click "New Database Backup" to dump your first database.</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-emerald-100 bg-white overflow-hidden">
+        <div className="rounded-2xl border border-[#353535] bg-[#212121] overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-emerald-50">
+            <thead className="bg-[#212121]">
               <tr>
                 <th className="px-5 py-3 text-left font-semibold">Backup / Database</th>
                 <th className="px-5 py-3 text-left">Status &amp; Progress</th>
@@ -604,7 +604,7 @@ export default function DatabaseBackupPage() {
                 return (
                   <React.Fragment key={j.id}>
                     <tr
-                      className={`border-t border-emerald-50 hover:bg-emerald-50/40 cursor-pointer transition ${
+                      className={`border-t border-[#353535] hover:bg-[#212121]/40 cursor-pointer transition ${
                         j.status === "running" ? "bg-blue-50/20" : j.status === "failed" ? "bg-red-50/20" : ""
                       }`}
                       onClick={() => setExpandedId(isExpanded ? null : j.id)}
@@ -648,7 +648,7 @@ export default function DatabaseBackupPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 gap-1"
+                              className="text-[#f36458] border-[#353535] hover:bg-[#212121] gap-1"
                               onClick={() => setRestoreRun(j)}
                             >
                               <RotateCcw className="h-3.5 w-3.5" /> Restore
@@ -663,7 +663,7 @@ export default function DatabaseBackupPage() {
 
                     {/* Expanded details row */}
                     {isExpanded && (
-                      <tr className="bg-slate-50 border-t border-emerald-50">
+                      <tr className="bg-slate-50 border-t border-[#353535]">
                         <td colSpan={6} className="px-5 py-4">
                           <div className="grid gap-3 md:grid-cols-2 text-xs">
                             <div>
@@ -679,7 +679,7 @@ export default function DatabaseBackupPage() {
                             {j.log_output && (
                               <div>
                                 <p className="font-semibold text-gray-600 mb-1">Log output</p>
-                                <pre className="max-h-40 overflow-y-auto rounded-lg bg-slate-900 text-emerald-300 text-[11px] p-3 whitespace-pre-wrap">
+                                <pre className="max-h-40 overflow-y-auto rounded-lg bg-slate-900 text-[#f36458] text-[11px] p-3 whitespace-pre-wrap">
                                   {j.log_output.slice(-2000)}
                                 </pre>
                               </div>

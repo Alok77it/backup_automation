@@ -21,12 +21,15 @@ export function PageHero({
       className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="flex items-start gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-200 bg-white shadow-sm">
-          <Icon className="h-6 w-6 text-emerald-600" />
+        <div
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px]"
+          style={{ background: "#212121", border: "1px solid #353535" }}
+        >
+          <Icon className="h-5 w-5" style={{ color: "#f36458" }} />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <h2 className="text-base font-semibold text-white">{title}</h2>
+          <p className="text-sm" style={{ color: "#797979" }}>{description}</p>
         </div>
       </div>
       {action}

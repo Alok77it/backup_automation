@@ -62,7 +62,7 @@ function duration(ms: number | null): string {
 }
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
-  completed: <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />,
+  completed: <CheckCircle className="h-4 w-4 text-[#37cd84] shrink-0" />,
   failed:    <XCircle className="h-4 w-4 text-red-500 shrink-0" />,
   timeout:   <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />,
   executing: <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />,
@@ -113,7 +113,7 @@ function SysLogRow({ log }: { log: LogEntry }) {
       </div>
       {open && (
         <div className="border-t bg-muted/30 rounded-b-xl px-4 py-3 space-y-2">
-          <div className="font-mono text-xs text-foreground whitespace-pre-wrap break-words bg-slate-900 text-emerald-300 rounded-lg p-3">
+          <div className="font-mono text-xs text-foreground whitespace-pre-wrap break-words bg-slate-900 text-[#37cd84] rounded-lg p-3">
             {log.message}
           </div>
           <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
@@ -278,12 +278,11 @@ function JobRow({
               <p className="text-xs text-red-600">{logsError}</p>
             ) : logs.length === 0 ? (
               <div className="rounded-lg bg-slate-900 p-4 text-xs text-slate-500 italic text-center">
-                No log output recorded for this job.
                 {job.status === "pending" || job.status === "queued"
-                  ? " Job is waiting to start."
+                  ? "This job has not started yet, so no output has been recorded."
                   : job.status === "executing"
-                  ? " Job is running — refresh to see output."
-                  : " The agent may not have returned output."}
+                  ? "This job is running. Refresh to check for new output."
+                  : "This job finished without stdout/stderr, or the agent did not return output."}
               </div>
             ) : (
               <div className="max-h-80 overflow-y-auto rounded-lg bg-slate-900 p-3 font-mono text-xs space-y-0.5">
@@ -295,7 +294,7 @@ function JobRow({
                         ? "text-red-400"
                         : l.level === "warn"
                         ? "text-amber-400"
-                        : "text-emerald-300"
+                        : "text-[#37cd84]"
                     }
                   >
                     <span className="mr-2 text-slate-600 select-none">#{l.sequence}</span>
@@ -561,10 +560,10 @@ export default function LogsPage() {
             )}
 
             {summary && (
-              <Card className="border-emerald-200">
+              <Card className="border-[#353535]">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-sm">
-                    <Sparkles className="h-4 w-4 text-emerald-600" /> AI Log Summary
+                    <Sparkles className="h-4 w-4 text-[#37cd84]" /> AI Log Summary
                   </CardTitle>
                 </CardHeader>
                 <CardContent>

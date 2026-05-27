@@ -147,7 +147,7 @@ export default function InfrastructurePage() {
         {servers.map((s, i) => (
           <motion.div key={s.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
             <Card className="glass card-shadow overflow-hidden">
-              <div className="h-1 w-full bg-gradient-to-r from-emerald-400 to-emerald-600" />
+              <div className="h-1 w-full bg-gradient-to-r from-[#f36458] to-[#e05448]" />
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div>
@@ -169,9 +169,9 @@ export default function InfrastructurePage() {
                       ["Disk", s.disk_percent],
                     ] as [string, number | null][]
                   ).map(([label, val]) => (
-                    <div key={label} className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-2">
+                    <div key={label} className="rounded-xl border border-[#353535] bg-[#212121] p-2">
                       <p className="text-xs text-muted-foreground">{label}</p>
-                      <p className="font-bold text-emerald-700">{val != null ? formatPercent(val) : "—"}</p>
+                      <p className="font-bold text-[#f36458]">{val != null ? formatPercent(val) : "—"}</p>
                     </div>
                   ))}
                 </div>

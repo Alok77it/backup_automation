@@ -97,6 +97,7 @@ class PluginInstallOut(BaseModel):
     installed_at: datetime | None
     created_at: datetime
     job_id: uuid.UUID | None = None
+    approval_id: uuid.UUID | None = None
 
     model_config = {"from_attributes": True}
 
@@ -308,7 +309,7 @@ async def install_plugin(
             job_type="plugin_install",
             plugin_id=plugin_id,
             payload=payload,
-            risk_level=RiskLevel.MEDIUM,
+            risk_level=RiskLevel.HIGH if plugin_id == "docker" else RiskLevel.MEDIUM,
             timeout_seconds=1800,
             ip_address=request.client.host if request.client else None,
         )
@@ -319,6 +320,7 @@ async def install_plugin(
 
         out = PluginInstallOut.model_validate(install)
         out.job_id = job.id
+        out.approval_id = job.approval_id
         return out
 
     except PluginNotFoundError as e:

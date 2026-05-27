@@ -35,15 +35,15 @@ export default function StoragePage() {
             <AreaChart data={data?.growth_trend?.map((t) => ({ ...t, used_gb: t.used_bytes / 1024 ** 3 })) ?? []}>
               <defs>
                 <linearGradient id="storageGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#f36458" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#f36458" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} />
               <Tooltip formatter={(v) => [`${Number(v).toFixed(2)} GB`, "Used"]} />
-              <Area type="monotone" dataKey="used_gb" stroke="#10B981" fill="url(#storageGrad)" />
+              <Area type="monotone" dataKey="used_gb" stroke="#f36458" fill="url(#storageGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </CardContent>

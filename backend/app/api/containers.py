@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 import json
+from urllib.parse import quote, urlsplit, urlunsplit
 from datetime import datetime
 from typing import Annotated
 
@@ -84,12 +85,15 @@ class ContainerCreateRequest(AgentActionRequest):
     docker_token: str | None = None
     docker_registry: str | None = None
     docker_credential_id: uuid.UUID | None = None
+    db_credential_id: uuid.UUID | None = None
 
 
 class ComposeDeployRequest(AgentActionRequest):
     server_id: uuid.UUID
     project_name: str = "managed-compose"
     compose_content: str
+    github_credential_id: uuid.UUID | None = None
+    github_repo_url: str | None = None
 
 
 class ContainerActionRequest(AgentActionRequest):
@@ -142,6 +146,30 @@ async def _resolve_agent_token(db: DbSession, membership: OrganizationMember, bo
         )
         return token
     raise HTTPException(status_code=400, detail="agent_token_raw or agent_credential_id is required")
+
+
+def _github_clone_url(repo_url: str, username: str | None, token: str) -> str:
+    parsed = urlsplit(repo_url.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return repo_url
+    user = quote(username or "x-access-token", safe="")
+    secret = quote(token, safe="")
+    return urlunsplit((parsed.scheme, f"{user}:{secret}@{parsed.netloc}", parsed.path, parsed.query, parsed.fragment))
+
+
+def _replace_env_value(env: list[str], key: str, value: str) -> list[str]:
+    prefix = f"{key}="
+    replaced = False
+    next_env: list[str] = []
+    for item in env:
+        if item.startswith(prefix):
+            next_env.append(f"{key}={value}")
+            replaced = True
+        else:
+            next_env.append(item)
+    if not replaced:
+        next_env.append(f"{key}={value}")
+    return next_env
 
 
 async def _refresh_snapshots_via_ssh(db: DbSession, membership: OrganizationMember, server_id: uuid.UUID) -> None:
@@ -370,6 +398,7 @@ async def create_container(
     port = args.pop("agent_port")
     server_id = args.pop("server_id")
     docker_credential_id = args.pop("docker_credential_id", None)
+    db_credential_id = args.pop("db_credential_id", None)
     if docker_credential_id:
         docker_cred, docker_secret = await _credential_secret(
             db,
@@ -380,6 +409,25 @@ async def create_container(
         args["docker_username"] = docker_cred.username
         args["docker_token"] = docker_secret
         args["docker_registry"] = docker_cred.registry_url or args.get("docker_registry")
+    if db_credential_id:
+        db_cred, db_secret = await _credential_secret(
+            db,
+            organization_id=membership.organization_id,
+            credential_id=db_credential_id,
+            provider="database",
+        )
+        env = list(args.get("env") or [])
+        if db_cred.username:
+            env = _replace_env_value(env, "DB_USER", db_cred.username)
+        env = _replace_env_value(env, "DB_PASSWORD", db_secret)
+        metadata = db_cred.metadata_json or {}
+        if metadata.get("host"):
+            env = _replace_env_value(env, "DB_HOST", str(metadata["host"]))
+        if metadata.get("port"):
+            env = _replace_env_value(env, "DB_PORT", str(metadata["port"]))
+        if metadata.get("dbname"):
+            env = _replace_env_value(env, "DB_NAME", str(metadata["dbname"]))
+        args["env"] = env
     args["_agent_token_raw"] = token
     args["agent_port"] = port
     return await _submit_container_command(
@@ -402,6 +450,16 @@ async def compose_up(
     membership: Annotated[OrganizationMember, Depends(require_permission("server:write"))],
 ):
     token = await _resolve_agent_token(db, membership, body)
+    compose_content = body.compose_content
+    if body.github_credential_id and body.github_repo_url:
+        github_cred, github_token = await _credential_secret(
+            db,
+            organization_id=membership.organization_id,
+            credential_id=body.github_credential_id,
+            provider="github",
+        )
+        clone_url = _github_clone_url(body.github_repo_url, github_cred.username, github_token)
+        compose_content = compose_content.replace(body.github_repo_url, clone_url)
     return await _submit_container_command(
         db=db,
         request=request,
@@ -410,7 +468,7 @@ async def compose_up(
         command="docker_compose_up",
         args={
             "install_path": f"/opt/managed-compose/{body.project_name}",
-            "compose_content": body.compose_content,
+            "compose_content": compose_content,
             "_agent_token_raw": token,
             "agent_port": body.agent_port,
         },
@@ -449,7 +507,7 @@ async def container_action(
             "_agent_token_raw": token,
             "agent_port": body.agent_port,
         },
-        risk_level=RiskLevel.MEDIUM,
+        risk_level=RiskLevel.HIGH if action == "delete" else RiskLevel.MEDIUM,
         timeout_seconds=300,
     )
 

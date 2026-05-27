@@ -77,6 +77,15 @@ async def submit_job(
 ):
     """Submit a new DevOps job. HIGH-risk jobs create an approval request."""
     try:
+        payload = body.payload or {}
+        command = payload.get("command") or body.command
+        if body.job_type == "agent_command" and command in {"package_install", "script_run_approved"}:
+            has_agent_token = bool(payload.get("_agent_token_raw") or payload.get("agent_credential_id"))
+            if not has_agent_token:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No agent token configured. Select an agent credential or provide agent_token_raw before submitting this command.",
+                )
         job = await execution_engine.submit_job(
             db,
             organization_id=membership.organization_id,

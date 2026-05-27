@@ -81,7 +81,7 @@ const SUGGESTIONS = [
 
 function RiskBadge({ level }: { level: string }) {
   const map: Record<string, string> = {
-    low: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    low: "bg-[#212121] text-[#f36458] border-[#353535]",
     medium: "bg-amber-100 text-amber-800 border-amber-200",
     high: "bg-red-100 text-red-800 border-red-200",
   };
@@ -96,7 +96,7 @@ function RiskBadge({ level }: { level: string }) {
 // ── Action status icon ────────────────────────────────────────────────────────
 
 function ActionStatusIcon({ status }: { status: string }) {
-  if (status === "executed") return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+  if (status === "executed") return <CheckCircle2 className="h-4 w-4 text-[#f36458]" />;
   if (status === "failed") return <XCircle className="h-4 w-4 text-red-500" />;
   if (status === "executing") return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
   if (status === "approved") return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
@@ -177,7 +177,7 @@ function ActionCard({
       className={`mt-3 rounded-xl border p-4 text-sm ${
         isDone
           ? action.status === "executed"
-            ? "border-emerald-200 bg-emerald-50"
+            ? "border-[#353535] bg-[#212121]"
             : action.status === "rejected"
             ? "border-slate-200 bg-slate-50"
             : "border-red-200 bg-red-50"
@@ -209,7 +209,7 @@ function ActionCard({
       )}
 
       {/* Command */}
-      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-900 px-3 py-2 font-mono text-xs text-emerald-300">
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-900 px-3 py-2 font-mono text-xs text-[#f36458]">
         <Terminal className="mr-1.5 inline h-3 w-3 text-slate-400" />
         {action.command}
       </div>
@@ -221,7 +221,7 @@ function ActionCard({
             size="sm"
             onClick={approve}
             disabled={busy}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="bg-[#f36458] hover:bg-[#f36458] text-white"
           >
             {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />}
             Approve &amp; Run
@@ -251,7 +251,7 @@ function ActionCard({
       {action.result_output && (
         <div className="mt-2">
           <p className="mb-1 text-xs font-medium text-slate-600">Output:</p>
-          <pre className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-slate-900 px-3 py-2 text-xs text-emerald-300 whitespace-pre-wrap">
+          <pre className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-slate-900 px-3 py-2 text-xs text-[#f36458] whitespace-pre-wrap">
             {action.result_output}
           </pre>
         </div>
@@ -297,7 +297,7 @@ function DevOpsApprovalCard({
   }
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-white p-4 text-sm">
+    <div className="rounded-xl border border-amber-200 bg-[#212121] p-4 text-sm">
       <div className="mb-2 flex items-start justify-between gap-3">
         <div>
           <div className="font-semibold text-slate-900">{approval.title}</div>
@@ -306,12 +306,12 @@ function DevOpsApprovalCard({
         <RiskBadge level={approval.risk_level} />
       </div>
       {approval.description && (
-        <pre className="mb-3 max-h-28 overflow-auto rounded-lg bg-slate-900 p-2 text-xs text-emerald-300 whitespace-pre-wrap">
+        <pre className="mb-3 max-h-28 overflow-auto rounded-lg bg-slate-900 p-2 text-xs text-[#f36458] whitespace-pre-wrap">
           {approval.description}
         </pre>
       )}
       <div className="flex gap-2">
-        <Button size="sm" disabled={busy} onClick={() => decide("approve")} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+        <Button size="sm" disabled={busy} onClick={() => decide("approve")} className="bg-[#f36458] hover:bg-[#f36458] text-white">
           {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />}
           Approve &amp; Run
         </Button>
@@ -438,7 +438,7 @@ export default function AIPage() {
           animate={{ opacity: 1 }}
           className={`mb-4 flex items-center gap-2 rounded-xl border px-4 py-2 text-sm ${
             aiStatus.configured
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              ? "border-[#353535] bg-[#212121] text-[#f36458]"
               : "border-amber-200 bg-amber-50 text-amber-800"
           }`}
         >
@@ -460,6 +460,7 @@ export default function AIPage() {
       <AnimatePresence>
         {(pendingActions.length > 0 || pendingDevOpsApprovals.length > 0) && (
           <motion.div
+            id="approvals"
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
@@ -499,7 +500,7 @@ export default function AIPage() {
               whileTap={{ scale: 0.98 }}
               type="button"
               onClick={() => sendMessage(s)}
-              className="rounded-full border border-emerald-200 bg-white px-4 py-1.5 text-sm text-emerald-800 shadow-sm transition hover:bg-emerald-50"
+              className="rounded-full border border-[#353535] bg-[#212121] px-4 py-1.5 text-sm text-[#f36458] shadow-sm transition hover:bg-[#212121]"
             >
               <Sparkles className="mr-1 inline h-3 w-3" />
               {s}
@@ -521,12 +522,12 @@ export default function AIPage() {
                   <div
                     className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm ${
                       m.role === "user"
-                        ? "gradient-primary text-white shadow-md"
-                        : "border border-emerald-100 bg-white text-foreground"
+                        ? "bg-[#f36458] text-white shadow-md"
+                        : "border border-[#353535] bg-[#212121] text-foreground"
                     }`}
                   >
                     {m.role === "assistant" && (
-                      <Brain className="mb-1 inline h-4 w-4 text-emerald-600" />
+                      <Brain className="mb-1 inline h-4 w-4 text-[#f36458]" />
                     )}
                     <div className="whitespace-pre-wrap">{m.content}</div>
 
@@ -548,7 +549,7 @@ export default function AIPage() {
 
               {loading && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
+                  <Loader2 className="h-4 w-4 animate-spin text-[#f36458]" />
                   <span>Analyzing infrastructure…</span>
                 </div>
               )}
@@ -556,7 +557,7 @@ export default function AIPage() {
             </div>
 
             {/* Input bar */}
-            <div className="flex gap-2 border-t border-emerald-100 p-4">
+            <div className="flex gap-2 border-t border-[#353535] p-4">
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

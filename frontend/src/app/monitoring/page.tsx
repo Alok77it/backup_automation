@@ -153,8 +153,8 @@ export default function MonitoringPage() {
       {servers.length > 0 && (
         <div className="mb-6 flex flex-wrap gap-2">
           {servers.map((s) => (
-            <div key={s.id} className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-white px-3 py-1.5 text-sm">
-              <span className={`h-2 w-2 rounded-full ${s.status === "online" ? "bg-emerald-500" : s.status === "error" ? "bg-red-500" : "bg-amber-400"}`} />
+            <div key={s.id} className="flex items-center gap-2 rounded-xl border border-[#353535] bg-[#212121] px-3 py-1.5 text-sm">
+              <span className={`h-2 w-2 rounded-full ${s.status === "online" ? "bg-[#212121]0" : s.status === "error" ? "bg-red-500" : "bg-amber-400"}`} />
               <span className="font-medium">{s.name}</span>
               <Badge variant={s.status === "online" ? "success" : s.status === "error" ? "error" : "warning"}>{s.status}</Badge>
             </div>
@@ -191,9 +191,9 @@ export default function MonitoringPage() {
                 <span className="text-sm font-medium">{label}</span>
                 <Badge variant={statusColor(value)}>{value.toFixed(1)}%</Badge>
               </div>
-              <div className="h-3 w-full overflow-hidden rounded-full bg-emerald-100">
+              <div className="h-3 w-full overflow-hidden rounded-full bg-[#212121]">
                 <div
-                  className={`h-3 rounded-full transition-all duration-500 ${value >= 90 ? "bg-red-500" : value >= 75 ? "bg-amber-400" : "bg-emerald-500"}`}
+                  className={`h-3 rounded-full transition-all duration-500 ${value >= 90 ? "bg-red-500" : value >= 75 ? "bg-amber-400" : "bg-[#212121]0"}`}
                   style={{ width: `${Math.min(value, 100)}%` }}
                 />
               </div>
@@ -211,11 +211,11 @@ export default function MonitoringPage() {
           <CardContent>
             {loading ? (
               <div className="flex h-64 items-center justify-center">
-                <RefreshCw className="h-8 w-8 animate-spin text-emerald-400" />
+                <RefreshCw className="h-8 w-8 animate-spin text-[#f36458]" />
               </div>
             ) : metrics.length === 0 ? (
               <div className="flex h-64 flex-col items-center justify-center gap-2 text-center">
-                <Activity className="h-12 w-12 text-emerald-200" />
+                <Activity className="h-12 w-12 text-[#f36458]" />
                 <p className="text-muted-foreground">No metrics collected yet.</p>
                 <p className="text-sm text-muted-foreground">
                   Go to <strong>Infrastructure</strong>, select a server, and click <strong>Metrics</strong> to collect data.
@@ -232,7 +232,7 @@ export default function MonitoringPage() {
                     formatter={(v) => [`${Number(v ?? 0).toFixed(1)}%`]}
                   />
                   <Legend />
-                  <Line type="monotone" dataKey="cpu_percent" stroke="#10b981" name="CPU %" dot={false} strokeWidth={2} />
+                  <Line type="monotone" dataKey="cpu_percent" stroke="#f36458" name="CPU %" dot={false} strokeWidth={2} />
                   <Line type="monotone" dataKey="memory_percent" stroke="#059669" name="Memory %" dot={false} strokeWidth={2} />
                   <Line type="monotone" dataKey="disk_percent" stroke="#6ee7b7" name="Disk %" dot={false} strokeWidth={2} />
                 </LineChart>

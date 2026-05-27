@@ -36,8 +36,8 @@ function formatUptime(s: number) {
 }
 
 function GaugeBar({ value, label }: { value: number; label: string }) {
-  const bar = value >= 90 ? "bg-red-500" : value >= 75 ? "bg-amber-400" : "bg-emerald-500";
-  const text = value >= 90 ? "text-red-600" : value >= 75 ? "text-amber-600" : "text-emerald-700";
+  const bar = value >= 90 ? "bg-red-500" : value >= 75 ? "bg-amber-400" : "bg-[#212121]0";
+  const text = value >= 90 ? "text-red-600" : value >= 75 ? "text-amber-600" : "text-[#f36458]";
   return (
     <div>
       <div className="flex justify-between text-xs mb-1">
@@ -104,7 +104,7 @@ export default function SelfMonitorPage() {
 
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(8)].map((_, i) => <div key={i} className="h-28 rounded-2xl bg-emerald-50 animate-pulse" />)}
+          {[...Array(8)].map((_, i) => <div key={i} className="h-28 rounded-2xl bg-[#212121] animate-pulse" />)}
         </div>
       ) : system ? (
         <>
@@ -131,7 +131,7 @@ export default function SelfMonitorPage() {
             {paths.map((p, i) => (
               <Card key={i} className="glass">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2"><Database className="h-4 w-4 text-emerald-600" /> Backup Storage</CardTitle>
+                  <CardTitle className="text-sm flex items-center gap-2"><Database className="h-4 w-4 text-[#f36458]" /> Backup Storage</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <GaugeBar value={p.percent} label={p.path} />
@@ -178,8 +178,8 @@ export default function SelfMonitorPage() {
                             <td className="py-2.5 px-3 text-xs text-gray-500 font-mono">{c.image}</td>
                             <td className="py-2.5 px-3">
                               <div className="flex items-center gap-1.5">
-                                {isUp ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <AlertCircle className="h-3.5 w-3.5 text-red-400" />}
-                                <span className={`text-xs ${isUp ? "text-emerald-700" : "text-red-600"}`}>{c.status}</span>
+                                {isUp ? <CheckCircle2 className="h-3.5 w-3.5 text-[#f36458]" /> : <AlertCircle className="h-3.5 w-3.5 text-red-400" />}
+                                <span className={`text-xs ${isUp ? "text-[#f36458]" : "text-red-600"}`}>{c.status}</span>
                               </div>
                             </td>
                             <td className="py-2.5 px-3 text-xs">{c.cpu || "—"}</td>

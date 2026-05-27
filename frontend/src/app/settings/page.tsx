@@ -36,8 +36,8 @@ export default function SettingsPage() {
         <Card className="glass">
           <CardHeader><CardTitle>API Configuration</CardTitle></CardHeader>
           <CardContent className="text-sm text-gray-500 space-y-2">
-            <p>Set <code className="rounded bg-emerald-50 px-1 py-0.5 text-emerald-700">ANTHROPIC_API_KEY</code> or <code className="rounded bg-emerald-50 px-1 py-0.5 text-emerald-700">OPENAI_API_KEY</code> in your <code className="rounded bg-emerald-50 px-1 py-0.5 text-emerald-700">.env</code> file for AI-powered analysis.</p>
-            <p>After updating .env, restart the API container: <code className="rounded bg-emerald-50 px-1 py-0.5 text-emerald-700">docker compose restart api</code></p>
+            <p>Set <code className="rounded bg-[#212121] px-1 py-0.5 text-[#f36458]">ANTHROPIC_API_KEY</code> or <code className="rounded bg-[#212121] px-1 py-0.5 text-[#f36458]">OPENAI_API_KEY</code> in your <code className="rounded bg-[#212121] px-1 py-0.5 text-[#f36458]">.env</code> file for AI-powered analysis.</p>
+            <p>After updating .env, restart the API container: <code className="rounded bg-[#212121] px-1 py-0.5 text-[#f36458]">docker compose restart api</code></p>
           </CardContent>
         </Card>
       </div>

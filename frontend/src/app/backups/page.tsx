@@ -38,7 +38,7 @@ interface BackupRun {
 }
 
 function RunStatusIcon({ status }: { status: string }) {
-  if (status === "completed") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+  if (status === "completed") return <CheckCircle2 className="h-4 w-4 text-[#f36458]" />;
   if (status === "failed") return <XCircle className="h-4 w-4 text-red-500" />;
   if (status === "running") return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
   return <Clock className="h-4 w-4 text-amber-400" />;
@@ -65,7 +65,7 @@ function ProgressBar({ status, startedAt }: { status: string; startedAt: string 
       </div>
       <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
         <motion.div
-          className="h-2 rounded-full bg-emerald-500"
+          className="h-2 rounded-full bg-[#212121]0"
           initial={{ width: 0 }}
           animate={{ width: `${fakeProgress}%` }}
           transition={{ duration: 0.5 }}
@@ -229,7 +229,7 @@ export default function BackupsPage() {
             <Card className="mb-6 glass">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Plus className="h-5 w-5 text-emerald-600" /> Create Backup Job
+                  <Plus className="h-5 w-5 text-[#f36458]" /> Create Backup Job
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -261,8 +261,8 @@ export default function BackupsPage() {
                     {["rsync","rclone"].map((e) => <option key={e} value={e}>{e}</option>)}
                   </SelectField>
 
-                  <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-3">
-                    <p className="text-sm font-semibold text-emerald-800 flex items-center gap-2">
+                  <div className="md:col-span-2 rounded-xl border border-[#353535] bg-[#212121]/50 p-4 space-y-3">
+                    <p className="text-sm font-semibold text-[#f36458] flex items-center gap-2">
                       <FolderOpen className="h-4 w-4" /> Source &amp; Destination Paths
                     </p>
                     <div>
@@ -287,17 +287,17 @@ export default function BackupsPage() {
                       className="font-mono" />
                     <p className="text-xs text-gray-500 mt-1">UTC time — Celery Beat triggers this automatically</p>
                   </div>
-                  <div className="flex items-center gap-6 rounded-xl border border-emerald-100 bg-white px-4 py-3">
+                  <div className="flex items-center gap-6 rounded-xl border border-[#353535] bg-[#212121] px-4 py-3">
                     <label className="flex items-center gap-2 cursor-pointer text-sm">
                       <input type="checkbox" checked={form.compression}
                         onChange={(e) => setForm({ ...form, compression: e.target.checked })}
-                        className="h-4 w-4 rounded accent-emerald-600" />
+                        className="h-4 w-4 rounded accent-[#f36458]" />
                       Compression
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer text-sm">
                       <input type="checkbox" checked={form.encryption}
                         onChange={(e) => setForm({ ...form, encryption: e.target.checked })}
-                        className="h-4 w-4 rounded accent-emerald-600" />
+                        className="h-4 w-4 rounded accent-[#f36458]" />
                       Encryption
                     </label>
                   </div>
@@ -317,11 +317,11 @@ export default function BackupsPage() {
       </AnimatePresence>
 
       {/* Tabs */}
-      <div className="mb-4 flex gap-1 rounded-xl border border-emerald-100 bg-emerald-50/40 p-1 w-fit">
+      <div className="mb-4 flex gap-1 rounded-xl border border-[#353535] bg-[#212121]/40 p-1 w-fit">
         <button
           onClick={() => setActiveTab("jobs")}
           className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-            activeTab === "jobs" ? "bg-white shadow text-emerald-800" : "text-gray-500 hover:text-gray-700"
+            activeTab === "jobs" ? "bg-white shadow text-[#f36458]" : "text-gray-500 hover:text-gray-700"
           }`}
         >
           <HardDrive className="inline h-4 w-4 mr-1.5" />
@@ -330,13 +330,13 @@ export default function BackupsPage() {
         <button
           onClick={() => setActiveTab("history")}
           className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-            activeTab === "history" ? "bg-white shadow text-emerald-800" : "text-gray-500 hover:text-gray-700"
+            activeTab === "history" ? "bg-white shadow text-[#f36458]" : "text-gray-500 hover:text-gray-700"
           }`}
         >
           <History className="inline h-4 w-4 mr-1.5" />
           Run History
           {runningCount > 0 && (
-            <span className="ml-2 inline-flex items-center rounded-full bg-emerald-500 px-2 py-0.5 text-xs text-white">
+            <span className="ml-2 inline-flex items-center rounded-full bg-[#212121]0 px-2 py-0.5 text-xs text-white">
               {runningCount} live
             </span>
           )}
@@ -345,9 +345,9 @@ export default function BackupsPage() {
 
       {/* JOBS TAB */}
       {activeTab === "jobs" && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="overflow-x-auto rounded-2xl border border-emerald-100 bg-white">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="overflow-x-auto rounded-2xl border border-[#353535] bg-[#212121]">
           <table className="w-full text-sm">
-            <thead className="bg-emerald-50">
+            <thead className="bg-[#212121]">
               <tr>
                 <th className="px-6 py-4 text-left font-semibold">Name</th>
                 <th className="px-6 py-4 text-left">Server</th>
@@ -362,13 +362,13 @@ export default function BackupsPage() {
             <tbody>
               {backups.map((b) => (
                 <React.Fragment key={b.id}>
-                  <tr className="border-t border-emerald-50 transition hover:bg-emerald-50/50 cursor-pointer"
+                  <tr className="border-t border-[#353535] transition hover:bg-[#212121]/50 cursor-pointer"
                     onClick={() => setExpandedId(expandedId === b.id ? null : b.id)}>
                     <td className="px-6 py-4 font-medium">{b.name}</td>
                     <td className="px-6 py-4 text-muted-foreground">{b.server_name || <span className="text-gray-300">—</span>}</td>
                     <td className="px-6 py-4 max-w-[200px]">
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <FolderOpen className="h-3 w-3 text-emerald-500 shrink-0" />
+                        <FolderOpen className="h-3 w-3 text-[#f36458] shrink-0" />
                         <span className="truncate">{b.source_paths?.join(", ") || "—"}</span>
                       </div>
                       {b.target_path && (
@@ -384,8 +384,8 @@ export default function BackupsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <div className="h-2 w-16 rounded-full bg-emerald-100">
-                          <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${Math.min(b.health_score, 100)}%` }} />
+                        <div className="h-2 w-16 rounded-full bg-[#212121]">
+                          <div className="h-2 rounded-full bg-[#212121]0" style={{ width: `${Math.min(b.health_score, 100)}%` }} />
                         </div>
                         <span className="text-xs font-medium">{b.health_score.toFixed(0)}%</span>
                       </div>
@@ -403,7 +403,7 @@ export default function BackupsPage() {
                           </Badge>
                           {(b.last_run_status === "running" || b.last_run_status === "pending") && (
                             <div className="mt-1 w-24 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                              <motion.div className="h-full bg-emerald-400 rounded-full"
+                              <motion.div className="h-full bg-[#37cd84] rounded-full"
                                 animate={{ width: ["20%", "80%", "20%"] }}
                                 transition={{ duration: 2, repeat: Infinity }} />
                             </div>
@@ -426,27 +426,27 @@ export default function BackupsPage() {
                     </td>
                   </tr>
                   {expandedId === b.id && (
-                    <tr className="bg-emerald-50/30">
+                    <tr className="bg-[#212121]/30">
                       <td colSpan={8} className="px-6 py-4">
                         <div className="grid gap-3 text-sm md:grid-cols-3">
                           <div>
-                            <p className="font-semibold text-emerald-700 mb-1">Source paths</p>
+                            <p className="font-semibold text-[#f36458] mb-1">Source paths</p>
                             {b.source_paths?.map((p, i) => (
-                              <p key={i} className="font-mono text-xs text-gray-600 bg-white rounded px-2 py-1 mb-1 border border-emerald-100">{p}</p>
+                              <p key={i} className="font-mono text-xs text-gray-600 bg-[#212121] rounded px-2 py-1 mb-1 border border-[#353535]">{p}</p>
                             )) || <p className="text-muted-foreground">None configured</p>}
                           </div>
                           <div>
-                            <p className="font-semibold text-emerald-700 mb-1">Storage</p>
-                            <p className="font-mono text-xs text-gray-600 bg-white rounded px-2 py-1 border border-emerald-100">
+                            <p className="font-semibold text-[#f36458] mb-1">Storage</p>
+                            <p className="font-mono text-xs text-gray-600 bg-[#212121] rounded px-2 py-1 border border-[#353535]">
                               {b.target_path || "/opt/backups (this server)"}
                             </p>
                             {b.destination_server_name && (
-                              <p className="text-xs text-emerald-700 mt-1 font-medium">→ Also pushed to: <strong>{b.destination_server_name}</strong></p>
+                              <p className="text-xs text-[#f36458] mt-1 font-medium">→ Also pushed to: <strong>{b.destination_server_name}</strong></p>
                             )}
                           </div>
                           <div>
-                            <p className="font-semibold text-emerald-700 mb-1">Schedule</p>
-                            <p className="font-mono text-xs text-gray-600 bg-white rounded px-2 py-1 border border-emerald-100">
+                            <p className="font-semibold text-[#f36458] mb-1">Schedule</p>
+                            <p className="font-mono text-xs text-gray-600 bg-[#212121] rounded px-2 py-1 border border-[#353535]">
                               {b.schedule_cron || "Manual only"}
                             </p>
                             <p className="text-xs text-muted-foreground mt-1">
@@ -463,7 +463,7 @@ export default function BackupsPage() {
           </table>
           {backups.length === 0 && (
             <div className="py-16 text-center">
-              <HardDrive className="mx-auto h-12 w-12 text-emerald-200 mb-4" />
+              <HardDrive className="mx-auto h-12 w-12 text-[#f36458] mb-4" />
               <p className="text-muted-foreground">No backup jobs yet.</p>
             </div>
           )}
@@ -497,20 +497,20 @@ export default function BackupsPage() {
             <span className="text-xs text-gray-400 ml-auto">Auto-refreshes every 5s when live jobs exist</span>
           </div>
 
-          <div className="rounded-2xl border border-emerald-100 bg-white overflow-hidden">
+          <div className="rounded-2xl border border-[#353535] bg-[#212121] overflow-hidden">
             {loadingRuns && filteredRuns.length === 0 ? (
               <div className="py-12 flex items-center justify-center gap-2 text-gray-400">
                 <Loader2 className="h-5 w-5 animate-spin" /> Loading history…
               </div>
             ) : filteredRuns.length === 0 ? (
               <div className="py-16 text-center">
-                <History className="mx-auto h-12 w-12 text-emerald-200 mb-4" />
+                <History className="mx-auto h-12 w-12 text-[#f36458] mb-4" />
                 <p className="text-muted-foreground">No backup runs found.</p>
                 <p className="text-sm text-muted-foreground mt-1">Trigger a backup from the Jobs tab to see history here.</p>
               </div>
             ) : (
               <table className="w-full text-sm">
-                <thead className="bg-emerald-50">
+                <thead className="bg-[#212121]">
                   <tr>
                     <th className="px-5 py-3 text-left font-semibold">Backup</th>
                     <th className="px-5 py-3 text-left">Status</th>
@@ -530,7 +530,7 @@ export default function BackupsPage() {
                     return (
                       <React.Fragment key={r.id}>
                         <tr
-                          className={`border-t border-emerald-50 transition hover:bg-emerald-50/40 cursor-pointer ${
+                          className={`border-t border-[#353535] transition hover:bg-[#212121]/40 cursor-pointer ${
                             r.status === "running" ? "bg-blue-50/30" : r.status === "failed" ? "bg-red-50/20" : ""
                           }`}
                           onClick={() => setExpandedRunId(isExpanded ? null : r.id)}
@@ -574,7 +574,7 @@ export default function BackupsPage() {
                           </td>
                         </tr>
                         {isExpanded && (
-                          <tr className="bg-slate-50 border-t border-emerald-50">
+                          <tr className="bg-slate-50 border-t border-[#353535]">
                             <td colSpan={7} className="px-5 py-4">
                               <div className="grid gap-3 md:grid-cols-2 text-xs">
                                 <div>
@@ -590,7 +590,7 @@ export default function BackupsPage() {
                                 {r.log_output && (
                                   <div>
                                     <p className="font-semibold text-gray-600 mb-1">Log output</p>
-                                    <pre className="max-h-40 overflow-y-auto rounded-lg bg-slate-900 text-emerald-300 text-[11px] p-3 whitespace-pre-wrap">
+                                    <pre className="max-h-40 overflow-y-auto rounded-lg bg-slate-900 text-[#f36458] text-[11px] p-3 whitespace-pre-wrap">
                                       {r.log_output.slice(-2000)}
                                     </pre>
                                   </div>

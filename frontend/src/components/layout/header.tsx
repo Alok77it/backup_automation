@@ -19,31 +19,62 @@ export function Header({ title }: { title: string }) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-emerald-100/80 bg-white/80 px-6 backdrop-blur-xl md:px-8">
+    <header
+      className="sticky top-0 z-30 flex h-16 items-center justify-between px-6 backdrop-blur-xl md:px-8"
+      style={{
+        background: "rgba(11,11,11,0.92)",
+        borderBottom: "1px solid #353535",
+      }}
+    >
       <motion.h1
         key={title}
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: 1, x: 0 }}
-        className="text-xl font-bold text-foreground"
+        className="text-base font-semibold tracking-tight text-white"
       >
         {title}
       </motion.h1>
+
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="relative" onClick={() => (window.location.href = "/alerts")}>
-          <Bell className="h-5 w-5" />
+        {/* Bell */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative"
+          onClick={() => (window.location.href = "/alerts")}
+        >
+          <Bell className="h-4 w-4 text-[#797979]" />
           {alertCount > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] text-white">
+            <span
+              className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-medium text-white"
+              style={{ background: "#f36458" }}
+            >
               {alertCount}
             </span>
           )}
         </Button>
-        <div className="ml-1 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-1.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary text-sm font-bold text-white">
-            {user?.full_name?.[0] || "U"}
+
+        {/* User chip */}
+        <div
+          className="ml-1 flex items-center gap-2.5 rounded-[5px] px-3 py-1.5"
+          style={{ background: "#212121", border: "1px solid #353535" }}
+        >
+          <div
+            className="flex h-7 w-7 items-center justify-center rounded-[4px] text-sm font-semibold text-white"
+            style={{ background: "#f36458", color: "#0b0b0b" }}
+          >
+            {user?.full_name?.[0]?.toUpperCase() || "U"}
           </div>
           <div className="hidden sm:block">
-            <p className="text-sm font-medium text-emerald-800">{user?.full_name}</p>
-            <p className="text-xs text-muted-foreground">{user?.email}</p>
+            <p className="text-xs font-medium text-white leading-none mb-0.5">
+              {user?.full_name || "User"}
+            </p>
+            <p
+              className="text-[10px] leading-none"
+              style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#797979" }}
+            >
+              {user?.email || ""}
+            </p>
           </div>
         </div>
       </div>

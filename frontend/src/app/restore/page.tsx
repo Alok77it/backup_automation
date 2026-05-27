@@ -39,7 +39,7 @@ interface RestoreProgress {
 }
 
 function StatusIcon({ status }: { status: string }) {
-  if (status === "completed") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+  if (status === "completed") return <CheckCircle2 className="h-4 w-4 text-[#f36458]" />;
   if (status === "failed") return <XCircle className="h-4 w-4 text-red-500" />;
   if (status === "running") return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
   return <Clock className="h-4 w-4 text-amber-400" />;
@@ -84,8 +84,8 @@ function RestoreProgressBar({ jobId }: { jobId: string }) {
 
   if (status === "completed") return (
     <div className="mt-1 space-y-0.5">
-      <div className="flex justify-between text-xs text-emerald-600"><span>✓ Complete</span><span>100%</span></div>
-      <div className="h-2 w-full rounded-full bg-emerald-100"><div className="h-2 w-full rounded-full bg-emerald-500" /></div>
+      <div className="flex justify-between text-xs text-[#f36458]"><span>✓ Complete</span><span>100%</span></div>
+      <div className="h-2 w-full rounded-full bg-[#212121]"><div className="h-2 w-full rounded-full bg-[#212121]0" /></div>
     </div>
   );
 
@@ -209,15 +209,15 @@ export default function RestorePage() {
             </SelectField>
 
             {selectedBackup && (
-              <div className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm">
-                <Shield className="h-4 w-4 text-emerald-600 shrink-0" />
+              <div className="flex items-center gap-3 rounded-xl border border-[#353535] bg-[#212121] px-4 py-3 text-sm">
+                <Shield className="h-4 w-4 text-[#f36458] shrink-0" />
                 <div>
                   <span className="font-medium">Restore confidence: </span>
-                  <span className="text-emerald-700 font-bold">{selectedBackup.restore_confidence.toFixed(0)}%</span>
+                  <span className="text-[#f36458] font-bold">{selectedBackup.restore_confidence.toFixed(0)}%</span>
                   <span className="mx-2 text-gray-300">·</span>
                   <Badge variant={selectedBackup.risk_level === "low" ? "success" : "warning"} >{selectedBackup.risk_level} risk</Badge>
                   {selectedBackup.backup_type === "docker" && (
-                    <p className="mt-1 text-xs text-emerald-700">Container backup selected. Restore will target the selected remote server/path for Docker archive recovery.</p>
+                    <p className="mt-1 text-xs text-[#f36458]">Container backup selected. Restore will target the selected remote server/path for Docker archive recovery.</p>
                   )}
                 </div>
               </div>
@@ -230,7 +230,7 @@ export default function RestorePage() {
             </SelectField>
 
             {destMode === "same" && (
-              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-sm">
+              <div className="rounded-xl border border-[#353535] bg-[#212121]/60 p-3 text-sm">
                 {selectedBackup?.server_name
                   ? <p>Restoring to <strong>{selectedBackup.server_name}</strong></p>
                   : <p className="text-amber-700">No server linked — choose another destination mode.</p>}
@@ -275,21 +275,21 @@ export default function RestorePage() {
 
         {analysis && (
           <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }}>
-            <Card className="glass border-emerald-200">
+            <Card className="glass border-[#353535]">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-emerald-600" /> AI Restore Analysis
+                  <Shield className="h-5 w-5 text-[#f36458]" /> AI Restore Analysis
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center">
+                  <div className="rounded-xl border border-[#353535] bg-[#212121] p-4 text-center">
                     <p className="text-xs text-muted-foreground">Restore Confidence</p>
-                    <p className="text-3xl font-bold text-emerald-700">{analysis.restore_confidence.toFixed(0)}%</p>
+                    <p className="text-3xl font-bold text-[#f36458]">{analysis.restore_confidence.toFixed(0)}%</p>
                   </div>
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center">
+                  <div className="rounded-xl border border-[#353535] bg-[#212121] p-4 text-center">
                     <p className="text-xs text-muted-foreground">Est. Duration</p>
-                    <p className="text-3xl font-bold text-emerald-700">{Math.round(analysis.estimated_duration_seconds / 60)}m</p>
+                    <p className="text-3xl font-bold text-[#f36458]">{Math.round(analysis.estimated_duration_seconds / 60)}m</p>
                   </div>
                 </div>
                 <Badge variant={analysis.risk_level === "low" ? "success" : "warning"}>Risk: {analysis.risk_level}</Badge>
@@ -302,7 +302,7 @@ export default function RestorePage() {
                   <div key={i} className="text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2">{w}</div>
                 ))}
                 {analysis.ai_summary && (
-                  <div className="rounded-xl border border-emerald-100 bg-white p-4 text-sm whitespace-pre-wrap">{analysis.ai_summary}</div>
+                  <div className="rounded-xl border border-[#353535] bg-[#212121] p-4 text-sm whitespace-pre-wrap">{analysis.ai_summary}</div>
                 )}
               </CardContent>
             </Card>
@@ -328,7 +328,7 @@ export default function RestorePage() {
             <div className="space-y-3">
               {jobs.map((j) => (
                 <div key={j.id} className={`rounded-xl border p-4 transition ${
-                  j.status === "completed" ? "border-emerald-200 bg-emerald-50/50" :
+                  j.status === "completed" ? "border-[#353535] bg-[#212121]/50" :
                   j.status === "failed" ? "border-red-200 bg-red-50/50" :
                   j.status === "running" ? "border-blue-200 bg-blue-50/50" :
                   "border-gray-100 bg-gray-50/50"
@@ -350,10 +350,10 @@ export default function RestorePage() {
                   )}
                   {j.status === "completed" && (
                     <div className="mt-1">
-                      <div className="h-2 w-full rounded-full bg-emerald-100">
-                        <div className="h-2 w-full rounded-full bg-emerald-500" />
+                      <div className="h-2 w-full rounded-full bg-[#212121]">
+                        <div className="h-2 w-full rounded-full bg-[#212121]0" />
                       </div>
-                      <p className="text-xs text-emerald-600 mt-0.5">100% — Restore complete</p>
+                      <p className="text-xs text-[#f36458] mt-0.5">100% — Restore complete</p>
                     </div>
                   )}
                 </div>

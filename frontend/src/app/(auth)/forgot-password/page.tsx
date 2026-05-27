@@ -36,7 +36,7 @@ export default function ForgotPasswordPage() {
               <Button type="submit" className="w-full" disabled={loading}>Send reset link</Button>
             </form>
           )}
-          <Link href="/login" className="mt-4 block text-center text-sm text-[#10B981]">Back to login</Link>
+          <Link href="/login" className="mt-4 block text-center text-sm text-[#f36458]">Back to login</Link>
         </CardContent>
       </Card>
     </div>

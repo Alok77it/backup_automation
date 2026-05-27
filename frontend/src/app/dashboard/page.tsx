@@ -57,15 +57,15 @@ export default function DashboardPage() {
               <AreaChart data={trends}>
                 <defs>
                   <linearGradient id="greenGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#f36458" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#f36458" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #10B981" }} />
-                <Area type="monotone" dataKey="success" stroke="#10B981" fill="url(#greenGrad)" name="Success" />
+                <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #f36458" }} />
+                <Area type="monotone" dataKey="success" stroke="#f36458" fill="url(#greenGrad)" name="Success" />
                 <Area type="monotone" dataKey="failed" stroke="#ef4444" fill="none" name="Failed" />
               </AreaChart>
             </ResponsiveContainer>
@@ -81,7 +81,7 @@ export default function DashboardPage() {
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis />
                 <Tooltip />
-                <Bar dataKey="success" fill="#10B981" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="success" fill="#f36458" radius={[6, 6, 0, 0]} />
                 <Bar dataKey="failed" fill="#ef4444" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -95,7 +95,7 @@ export default function DashboardPage() {
           <div className="space-y-3">
             {events.length === 0 && <p className="text-sm text-gray-500">No recent events</p>}
             {events.map((e) => (
-              <div key={e.id} className="flex items-center gap-4 rounded-xl border border-emerald-100 p-4 transition hover:bg-emerald-50/80">
+              <div key={e.id} className="flex items-center gap-4 rounded-xl border border-[#353535] p-4 transition hover:bg-[#212121]">
                 <Badge variant={e.level === "error" ? "error" : e.level === "warning" ? "warning" : "default"}>{e.level}</Badge>
                 <div className="flex-1">
                   <p className="text-sm font-medium">{e.message}</p>

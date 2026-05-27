@@ -18,15 +18,15 @@ export function DashboardLayout({ children, title }: { children: React.ReactNode
   return (
     <div className="relative min-h-screen bg-background">
       <CsrfSync />
-      <div className="pointer-events-none fixed inset-0 tech-grid opacity-40" />
-      <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-emerald-50/80 via-transparent to-white" />
+      {/* Subtle grid texture */}
+      <div className="pointer-events-none fixed inset-0 tech-grid opacity-100" />
       <Sidebar />
       <div className="relative pl-[var(--sidebar-width)]">
         <Header title={title} />
         <motion.main
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
+          transition={{ duration: 0.3 }}
           className="p-6 md:p-8"
         >
           {children}

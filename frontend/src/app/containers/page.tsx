@@ -64,6 +64,12 @@ interface CommandResult {
   duration_ms: number;
 }
 
+interface JobSubmitResponse {
+  message: string;
+  job_id: string;
+  approval_id: string | null;
+}
+
 interface DockerStatus {
   docker_installed: boolean;
   compose_available: boolean;
@@ -84,7 +90,7 @@ interface StoredCredential {
 // ── State styling ────────────────────────────────────────────────────────────
 
 const STATE_CONFIG: Record<string, { variant: "outline" | "secondary" | "destructive"; dot: string }> = {
-  running:    { variant: "outline",     dot: "bg-emerald-500" },
+  running:    { variant: "outline",     dot: "bg-[#f36458]" },
   stopped:    { variant: "secondary",   dot: "bg-slate-400" },
   exited:     { variant: "secondary",   dot: "bg-amber-400" },
   dead:       { variant: "destructive", dot: "bg-red-500" },
@@ -258,7 +264,7 @@ function ContainerRow({
                 <div className="text-muted-foreground font-medium mb-0.5">Exit Code</div>
                 <div>
                   {c.exit_code != null ? (
-                    <span className={c.exit_code === 0 ? "text-emerald-600 font-medium" : "text-red-600 font-medium"}>
+                    <span className={c.exit_code === 0 ? "text-[#37cd84] font-medium" : "text-red-600 font-medium"}>
                       {c.exit_code}
                     </span>
                   ) : "—"}
@@ -393,6 +399,7 @@ export default function ContainersPage() {
           server_id: selectedServer,
           agent_credential_id: agentCredentialId || undefined,
           docker_credential_id: dockerCredentialId || undefined,
+          db_credential_id: dbCredentialId || undefined,
           ...imageForm,
           ports: splitLines(imageForm.ports),
           env: splitLines(imageForm.env),
@@ -438,7 +445,7 @@ export default function ContainersPage() {
     if (!confirm(`${action} container "${c.name}"?`)) return;
     setError(""); setMessage("");
     try {
-      await api(`/containers/action/${action}`, {
+      const res = await api<JobSubmitResponse>(`/containers/action/${action}`, {
         method: "POST",
         body: JSON.stringify({
           server_id: c.server_id,
@@ -446,7 +453,11 @@ export default function ContainersPage() {
           agent_credential_id: agentCredentialId,
         }),
       });
-      setMessage(`${action} job submitted.`);
+      setMessage(
+        res.approval_id
+          ? `${action} request submitted and waiting for approval. Open Approvals before it will run.`
+          : `${action} job submitted.`
+      );
       setTimeout(loadData, 2500);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Action failed");
@@ -461,7 +472,7 @@ export default function ContainersPage() {
     setInstallingDocker(true);
     setError(""); setMessage("");
     try {
-      await api("/plugins/docker/install", {
+      const res = await api<JobSubmitResponse>("/plugins/docker/install", {
         method: "POST",
         body: JSON.stringify({
           server_id: selectedServer,
@@ -469,8 +480,12 @@ export default function ContainersPage() {
           config: {},
         }),
       });
-      setMessage("Docker install job submitted. It will run directly; no approval step is required.");
-      setDockerMissing(false);
+      setMessage(
+        res.approval_id
+          ? "Docker install is waiting for approval. Open Approvals to review it before it runs."
+          : "Docker install job submitted. Check Logs -> Job Logs for output."
+      );
+      if (!res.approval_id) setDockerMissing(false);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Docker install failed");
     } finally {
@@ -588,7 +603,7 @@ export default function ContainersPage() {
           </div>
         )}
         {message && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+          <div className="rounded-lg border border-[#37cd84]/30 bg-[#37cd84]/08 text-[#37cd84] p-2.5 text-xs">
             {message}
           </div>
         )}
@@ -754,7 +769,7 @@ export default function ContainersPage() {
                     />
                     <p className="text-[11px] text-muted-foreground">
                       One per line or comma-separated.
-                      {dbCreds.length > 0 && " Use the dropdown above to auto-fill database credentials."}
+                      {dbCreds.length > 0 && " Use the dropdown above to attach database credentials; the saved password is injected securely when the job is submitted."}
                     </p>
                   </div>
 

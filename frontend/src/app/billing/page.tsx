@@ -26,19 +26,19 @@ export default function BillingPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="rounded-xl bg-[#D1FAE5] p-4">
+            <div className="rounded-xl bg-[#353535] p-4">
               <p className="text-sm text-gray-500">Storage</p>
               <p className="text-xl font-bold">{billing?.storage_used_gb.toFixed(1)} / {billing?.storage_quota_gb} GB</p>
             </div>
-            <div className="rounded-xl bg-[#D1FAE5] p-4">
+            <div className="rounded-xl bg-[#353535] p-4">
               <p className="text-sm text-gray-500">Members</p>
               <p className="text-xl font-bold">{billing?.members_count}</p>
             </div>
-            <div className="rounded-xl bg-[#D1FAE5] p-4">
+            <div className="rounded-xl bg-[#353535] p-4">
               <p className="text-sm text-gray-500">Servers</p>
               <p className="text-xl font-bold">{billing?.servers_count}</p>
             </div>
-            <div className="rounded-xl bg-[#D1FAE5] p-4">
+            <div className="rounded-xl bg-[#353535] p-4">
               <p className="text-sm text-gray-500">Backups</p>
               <p className="text-xl font-bold">{billing?.backups_count}</p>
             </div>

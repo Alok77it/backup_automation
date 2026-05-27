@@ -4,10 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { HardDrive, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { authApi, saveAuth, ApiError } from "@/lib/api";
 
 export default function LoginPage() {
@@ -33,40 +33,91 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#D1FAE5] via-white to-[#F3F4F6] p-4">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
-        <div className="mb-8 flex flex-col items-center">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl gradient-primary shadow-lg">
-            <HardDrive className="h-7 w-7 text-white" />
+    <div
+      className="flex min-h-screen items-center justify-center p-4"
+      style={{ background: "#0b0b0b" }}
+    >
+      {/* Grid texture */}
+      <div className="pointer-events-none fixed inset-0 tech-grid" />
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative w-full max-w-sm"
+      >
+        {/* Wordmark */}
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="brand-dot" />
+            <span className="text-xl font-semibold text-white tracking-tight">
+              Backup Intelligence
+            </span>
           </div>
-          <h1 className="text-2xl font-bold gradient-text">Backup Intelligence</h1>
-          <p className="text-sm text-gray-500">AI-Powered Backup & Recovery</p>
+          <p
+            className="text-[11px] uppercase tracking-widest"
+            style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#797979" }}
+          >
+            AI Recovery Platform
+          </p>
         </div>
-        <Card className="glass card-shadow">
-          <CardHeader>
-            <CardTitle>Sign in</CardTitle>
-            <CardDescription>Enter your credentials to access the platform</CardDescription>
+
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Sign in</CardTitle>
+            <p className="text-sm" style={{ color: "#797979" }}>
+              Enter your credentials to continue
+            </p>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</div>}
-              <div>
-                <label className="mb-1.5 block text-sm font-medium">Email</label>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@company.com" />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium">Password</label>
-                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-              </div>
+              {error && (
+                <div
+                  className="rounded-[3px] border px-3 py-2.5 text-sm"
+                  style={{ background: "rgba(221,0,0,0.08)", borderColor: "#dd0000", color: "#f87171" }}
+                >
+                  {error}
+                </div>
+              )}
+              <Input
+                type="email"
+                label="Email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="you@company.com"
+              />
+              <Input
+                type="password"
+                label="Password"
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+              />
               <div className="flex justify-end">
-                <Link href="/forgot-password" className="text-sm text-[#10B981] hover:underline">Forgot password?</Link>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs transition-colors hover:text-white"
+                  style={{ color: "#797979" }}
+                >
+                  Forgot password?
+                </Link>
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
               </Button>
             </form>
-            <p className="mt-6 text-center text-sm text-gray-500">
-              No account? <Link href="/signup" className="font-medium text-[#10B981] hover:underline">Create one</Link>
+            <p className="mt-5 text-center text-sm" style={{ color: "#797979" }}>
+              No account?{" "}
+              <Link
+                href="/signup"
+                className="font-medium text-white transition-colors"
+                style={{ color: "#f36458" }}
+              >
+                Create one
+              </Link>
             </p>
           </CardContent>
         </Card>

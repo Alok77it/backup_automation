@@ -99,10 +99,10 @@ export default function OrganizationsPage() {
       <AnimatePresence>
         {showForm && (
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <Card className="mb-6 glass border-emerald-200">
+            <Card className="mb-6 glass border-[#353535]">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="flex items-center gap-2">
-                  <UserPlus className="h-5 w-5 text-emerald-600" /> Create New User
+                  <UserPlus className="h-5 w-5 text-[#f36458]" /> Create New User
                 </CardTitle>
                 <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>
                   <X className="h-4 w-4" />
@@ -153,7 +153,7 @@ export default function OrganizationsPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                     <select
-                      className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f36458]"
                       value={form.role}
                       onChange={(e) => setForm({ ...form, role: e.target.value })}
                     >
@@ -199,7 +199,7 @@ export default function OrganizationsPage() {
                     className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 hover:bg-gray-50 transition"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-semibold text-sm">
+                      <div className="h-9 w-9 rounded-full bg-[#212121] flex items-center justify-center text-[#f36458] font-semibold text-sm">
                         {m.full_name?.charAt(0)?.toUpperCase() || m.email.charAt(0).toUpperCase()}
                       </div>
                       <div>

@@ -170,10 +170,10 @@ export default function PoliciesPage() {
       <AnimatePresence>
         {showForm && (
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <Card className="mb-6 glass border-emerald-200">
+            <Card className="mb-6 glass border-[#353535]">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-emerald-600" />
+                  <Shield className="h-5 w-5 text-[#f36458]" />
                   {editId ? "Edit Policy" : "Create Policy"}
                 </CardTitle>
                 <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>
@@ -197,8 +197,8 @@ export default function PoliciesPage() {
                   </div>
 
                   {/* Row 2: Retention */}
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-4">
-                    <p className="text-sm font-semibold text-emerald-800">🗄 Retention Settings</p>
+                  <div className="rounded-xl border border-[#353535] bg-[#212121]/50 p-4 space-y-4">
+                    <p className="text-sm font-semibold text-[#f36458]">🗄 Retention Settings</p>
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -236,7 +236,7 @@ export default function PoliciesPage() {
                         type="checkbox"
                         checked={form.cleanup_enabled}
                         onChange={(e) => setForm({ ...form, cleanup_enabled: e.target.checked })}
-                        className="h-4 w-4 rounded accent-emerald-600"
+                        className="h-4 w-4 rounded accent-[#f36458]"
                       />
                       <span className="font-medium">Auto-cleanup enabled</span>
                       <span className="text-gray-500">— automatically remove old backups per retention rules above</span>
@@ -249,7 +249,7 @@ export default function PoliciesPage() {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Quick Schedule Preset</label>
                       <select
-                        className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f36458]"
                         value={form.cron_preset}
                         onChange={(e) => {
                           const val = e.target.value;
@@ -278,7 +278,7 @@ export default function PoliciesPage() {
                       <p className="text-xs text-gray-500 mt-1">
                         Format: <code className="bg-gray-100 px-1 rounded">minute hour day-of-month month day-of-week</code> (UTC).
                         {form.cron_expression && (
-                          <span className="ml-2 text-emerald-700 font-medium">
+                          <span className="ml-2 text-[#f36458] font-medium">
                             → {describeCron(form.cron_expression)}
                           </span>
                         )}
@@ -301,13 +301,13 @@ export default function PoliciesPage() {
                       />
                       <p className="text-xs text-gray-500 mt-1">How many times to retry a failed backup (0 = no retry)</p>
                     </div>
-                    <div className="flex flex-col gap-3 justify-center rounded-xl border border-gray-100 bg-white px-4 py-3">
+                    <div className="flex flex-col gap-3 justify-center rounded-xl border border-gray-100 bg-[#212121] px-4 py-3">
                       <label className="flex items-center gap-2 cursor-pointer text-sm">
                         <input
                           type="checkbox"
                           checked={form.compression_enabled}
                           onChange={(e) => setForm({ ...form, compression_enabled: e.target.checked })}
-                          className="h-4 w-4 rounded accent-emerald-600"
+                          className="h-4 w-4 rounded accent-[#f36458]"
                         />
                         <span className="font-medium">Compression</span>
                         <span className="text-gray-500 text-xs">— reduce backup file size</span>
@@ -317,7 +317,7 @@ export default function PoliciesPage() {
                           type="checkbox"
                           checked={form.encryption_enabled}
                           onChange={(e) => setForm({ ...form, encryption_enabled: e.target.checked })}
-                          className="h-4 w-4 rounded accent-emerald-600"
+                          className="h-4 w-4 rounded accent-[#f36458]"
                         />
                         <span className="font-medium">Encryption</span>
                         <span className="text-gray-500 text-xs">— encrypt backup files at rest</span>
@@ -341,7 +341,7 @@ export default function PoliciesPage() {
 
       {policies.length === 0 && !showForm ? (
         <div className="py-20 text-center">
-          <Shield className="mx-auto h-12 w-12 text-emerald-200 mb-4" />
+          <Shield className="mx-auto h-12 w-12 text-[#f36458] mb-4" />
           <p className="text-muted-foreground">No policies yet.</p>
           <p className="text-sm text-muted-foreground mt-1">Click "New Policy" to define your first backup policy.</p>
         </div>
@@ -355,7 +355,7 @@ export default function PoliciesPage() {
                     <div>
                       <h3 className="font-semibold text-base">{p.name}</h3>
                       {p.cron_expression && (
-                        <p className="text-xs text-emerald-700 mt-0.5 flex items-center gap-1">
+                        <p className="text-xs text-[#f36458] mt-0.5 flex items-center gap-1">
                           <Clock className="h-3 w-3" />
                           {describeCron(p.cron_expression)}
                         </p>
@@ -378,16 +378,16 @@ export default function PoliciesPage() {
                   </div>
 
                   {/* Retention visual */}
-                  <div className="mb-3 rounded-lg bg-emerald-50 border border-emerald-100 p-3 space-y-2">
-                    <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Retention</p>
+                  <div className="mb-3 rounded-lg bg-[#212121] border border-[#353535] p-3 space-y-2">
+                    <p className="text-xs font-semibold text-[#f36458] uppercase tracking-wide">Retention</p>
                     <div className="flex gap-4 text-sm">
                       <div>
-                        <p className="text-2xl font-bold text-emerald-700">{p.retention_days}</p>
+                        <p className="text-2xl font-bold text-[#f36458]">{p.retention_days}</p>
                         <p className="text-xs text-gray-500">days max age</p>
                       </div>
-                      <div className="w-px bg-emerald-200" />
+                      <div className="w-px bg-[#f36458]" />
                       <div>
-                        <p className="text-2xl font-bold text-emerald-700">{p.retention_count}</p>
+                        <p className="text-2xl font-bold text-[#f36458]">{p.retention_count}</p>
                         <p className="text-xs text-gray-500">copies kept</p>
                       </div>
                     </div>

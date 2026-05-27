@@ -17,7 +17,7 @@ function passwordStrength(pw: string): { score: number; label: string; color: st
   if (/[0-9]/.test(pw)) score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
   const labels = ["Weak", "Fair", "Good", "Strong"];
-  const colors = ["bg-red-500", "bg-amber-500", "bg-yellow-500", "bg-emerald-500"];
+  const colors = ["bg-red-500", "bg-amber-500", "bg-yellow-500", "bg-[#212121]0"];
   return { score, label: labels[score - 1] || "Too short", color: colors[score - 1] || "bg-gray-300" };
 }
 
@@ -44,13 +44,13 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#D1FAE5] via-white to-[#F3F4F6] p-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#0b0b0b] p-4">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl gradient-primary">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f36458]">
             <HardDrive className="h-7 w-7 text-white" />
           </div>
-          <h1 className="text-2xl font-bold gradient-text">Create Account</h1>
+          <h1 className="text-2xl font-bold text-[#f36458]">Create Account</h1>
         </div>
         <Card className="glass card-shadow">
           <CardHeader>
@@ -81,7 +81,7 @@ export default function SignupPage() {
               </Button>
             </form>
             <p className="mt-4 text-center text-sm text-gray-500">
-              Have an account? <Link href="/login" className="text-[#10B981] hover:underline">Sign in</Link>
+              Have an account? <Link href="/login" className="text-[#f36458] hover:underline">Sign in</Link>
             </p>
           </CardContent>
         </Card>

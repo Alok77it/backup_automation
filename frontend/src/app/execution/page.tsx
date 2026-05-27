@@ -195,7 +195,7 @@ export default function ExecutionPage() {
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
           )}
           {success && (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{success}</div>
+            <div className="rounded-lg border border-[#353535] bg-[#212121] p-3 text-sm text-[#f36458]">{success}</div>
           )}
 
           {/* Server + credential selector */}
@@ -444,7 +444,7 @@ export default function ExecutionPage() {
                   {logs.map((l) => (
                     <div
                       key={l.sequence}
-                      className={l.level === "error" || l.stream === "stderr" ? "text-red-400" : "text-emerald-300"}
+                      className={l.level === "error" || l.stream === "stderr" ? "text-red-400" : "text-[#f36458]"}
                     >
                       <span className="mr-2 text-slate-500 select-none">#{l.sequence}</span>
                       {l.message}

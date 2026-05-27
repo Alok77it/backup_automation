@@ -24,7 +24,7 @@ function ResetForm() {
       <CardHeader><CardTitle>{done ? "Password updated" : "Set new password"}</CardTitle></CardHeader>
       <CardContent>
         {done ? (
-          <a href="/login" className="text-[#10B981] hover:underline">Go to login</a>
+          <a href="/login" className="text-[#f36458] hover:underline">Go to login</a>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />

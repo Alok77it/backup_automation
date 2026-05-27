@@ -22,9 +22,9 @@ export default function AlertsPage() {
       </div>
       <div className="space-y-3">
         {alerts.map((a) => (
-          <Card key={a.id} className={`glass ${!a.is_read ? "border-emerald-300" : ""}`}>
+          <Card key={a.id} className={`glass ${!a.is_read ? "border-[#353535]" : ""}`}>
             <CardContent className="flex items-start gap-4 p-4">
-              <Bell className={`h-5 w-5 mt-0.5 ${a.severity === "critical" ? "text-red-500" : "text-[#10B981]"}`} />
+              <Bell className={`h-5 w-5 mt-0.5 ${a.severity === "critical" ? "text-red-500" : "text-[#f36458]"}`} />
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold">{a.title}</h3>

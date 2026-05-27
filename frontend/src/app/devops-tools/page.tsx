@@ -61,6 +61,17 @@ interface StoredCredential {
   secret_preview: string | null;
 }
 
+interface DockerStatus {
+  docker_installed: boolean;
+  compose_available: boolean;
+  output: string | null;
+}
+
+interface JobSubmitResponse {
+  job_id?: string;
+  approval_id?: string | null;
+}
+
 // ── Credential type config ────────────────────────────────────────────────────
 
 type CredProvider = "agent" | "docker" | "github" | "jenkins" | "database";
@@ -139,6 +150,7 @@ interface ToolDef {
   icon: string;
   description: string;
   requiredCredTypes: CredProvider[];
+  requiresDocker: boolean;
   configFields: Array<{ key: string; label: string; placeholder: string; type?: string }>;
   defaultConfig: Record<string, string | number | boolean>;
 }
@@ -150,6 +162,7 @@ const TOOLS: ToolDef[] = [
     icon: "🐳",
     description: "Install Docker Engine on a remote server",
     requiredCredTypes: ["agent", "docker"],
+    requiresDocker: false,
     configFields: [],
     defaultConfig: {},
   },
@@ -159,6 +172,7 @@ const TOOLS: ToolDef[] = [
     icon: "🔧",
     description: "Deploy Jenkins CI/CD server",
     requiredCredTypes: ["agent", "jenkins"],
+    requiresDocker: true,
     configFields: [
       { key: "jenkins_port", label: "Jenkins Port", placeholder: "18080" },
       { key: "jenkins_agent_port", label: "Agent Port", placeholder: "50000" },
@@ -172,6 +186,7 @@ const TOOLS: ToolDef[] = [
     icon: "⚡",
     description: "Deploy n8n workflow automation server",
     requiredCredTypes: ["agent"],
+    requiresDocker: true,
     configFields: [
       { key: "n8n_port", label: "Port", placeholder: "5678" },
       { key: "n8n_basic_auth_user", label: "Admin Username", placeholder: "admin" },
@@ -191,6 +206,7 @@ const TOOLS: ToolDef[] = [
     icon: "🐙",
     description: "Install self-hosted GitHub Actions runner",
     requiredCredTypes: ["agent", "github"],
+    requiresDocker: true,
     configFields: [
       { key: "github_owner", label: "GitHub Owner (user or org)", placeholder: "my-org" },
       { key: "github_repo", label: "Repository (leave blank for org-level)", placeholder: "my-repo" },
@@ -329,7 +345,7 @@ function CredentialManager({
             </div>
           )}
           {formSuccess && (
-            <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-700">
+            <div className="mb-3 rounded-lg border border-[#37cd84]/30 bg-[#37cd84]/08 text-[#37cd84] p-2.5 text-xs">
               {formSuccess}
             </div>
           )}
@@ -527,6 +543,7 @@ function InstallWizard({
   }
 
   function setInlineField(type: CredProvider, field: string, value: string) {
+    setInlineErrors((prev) => ({ ...prev, [type]: "" }));
     setInlineForms((prev) => ({
       ...prev,
       [type]: { ...getInlineForm(type), [field]: value },
@@ -562,6 +579,7 @@ function InstallWizard({
       setCredMap((prev) => ({ ...prev, [type]: saved.id }));
       setInlineOpen((prev) => ({ ...prev, [type]: false }));
       setInlineForms((prev) => ({ ...prev, [type]: { label: "", username: "", secret: "", registry: "docker.io" } }));
+      setInlineErrors((prev) => ({ ...prev, [type]: "" }));
     } catch (e) {
       setInlineErrors((prev) => ({ ...prev, [type]: e instanceof ApiError ? e.message : "Save failed." }));
     } finally {
@@ -591,6 +609,13 @@ function InstallWizard({
     setError(""); setSuccess(""); setInstalling(true);
     if (!credMap["agent"]) { setError("Agent credential is required."); setInstalling(false); return; }
     try {
+      if (selectedTool?.requiresDocker) {
+        const dockerStatus = await api<DockerStatus>(`/containers/docker-status/${selectedServer}`);
+        if (!dockerStatus.docker_installed) {
+          setError(`${selectedTool.name} requires Docker on the target server. Install Docker first, then retry this installation.`);
+          return;
+        }
+      }
       const finalConfig: Record<string, unknown> = { ...config, public_ip: publicIp };
       if (selectedTool?.id === "n8n") {
         finalConfig.n8n_host = publicIp;
@@ -598,7 +623,7 @@ function InstallWizard({
         finalConfig.n8n_protocol = "http";
         finalConfig.webhook_url = `http://${publicIp}:${config.n8n_port || 5678}/`;
       }
-      await api(`/plugins/${selectedTool!.id}/install`, {
+      const res = await api<JobSubmitResponse>(`/plugins/${selectedTool!.id}/install`, {
         method: "POST",
         body: JSON.stringify({
           server_id: selectedServer,
@@ -608,7 +633,11 @@ function InstallWizard({
           config: finalConfig,
         }),
       });
-      setSuccess(`${selectedTool!.name} install submitted. It will run directly without approval.`);
+      setSuccess(
+        res.approval_id
+          ? `${selectedTool!.name} install is waiting for approval. Open Approvals to review it before it runs.`
+          : `${selectedTool!.name} install submitted. Check Logs -> Job Logs for output.`
+      );
       setTimeout(() => { onDone(); setStep("tool"); setSelectedTool(null); }, 1500);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Install failed");
@@ -628,7 +657,7 @@ function InstallWizard({
         <StepIndicator steps={WIZARD_STEPS} current={stepIndex} />
 
         {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-        {success && <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{success}</div>}
+        {success && <div className="mb-4 rounded-lg border border-[#37cd84]/30 bg-[#37cd84]/08 text-[#37cd84] p-2.5 text-xs">{success}</div>}
 
         {/* Step 1 — Select Tool */}
         {step === "tool" && (
@@ -940,7 +969,7 @@ function InstallationsPanel({
   if (visible.length === 0) return null;
 
   const statusIcon = (s: string) => {
-    if (s === "installed") return <CheckCircle className="h-4 w-4 text-emerald-500" />;
+    if (s === "installed") return <CheckCircle className="h-4 w-4 text-[#37cd84]" />;
     if (s === "installing") return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
     if (s === "failed") return <AlertCircle className="h-4 w-4 text-red-500" />;
     return <Package className="h-4 w-4 text-muted-foreground" />;
@@ -996,7 +1025,7 @@ function InstallationsPanel({
       </CardHeader>
       <CardContent>
         {error && <div className="mb-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">{error}</div>}
-        {message && <div className="mb-3 rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">{message}</div>}
+        {message && <div className="mb-3 rounded border border-[#37cd84]/30 bg-[#37cd84]/08 text-[#37cd84] p-2.5 text-xs">{message}</div>}
         <div className="divide-y">
           {visible.map((inst) => {
             const tool = TOOLS.find((t) => t.id === inst.plugin_id);
@@ -1101,12 +1130,13 @@ function RunGithubPanel({ servers, credentials }: { servers: ServerType[]; crede
       } else {
         // Container mode: clone into a container and run the script inside it
         const envLines = containerEnv.split(/\r?\n|,/).map((l) => l.trim()).filter(Boolean);
+        const installGit = "command -v git >/dev/null 2>&1 || (command -v apk >/dev/null 2>&1 && apk add --no-cache git || command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git || command -v yum >/dev/null 2>&1 && yum install -y git || command -v dnf >/dev/null 2>&1 && dnf install -y git)";
         const composeContent = `services:
   app:
     image: ${containerImage}
     container_name: ${containerName || "github-app"}
     working_dir: /app
-    command: sh -c "apk add --no-cache git && git clone ${repoUrl} /app && ${script.split("\n").join(" && ")}"
+    command: sh -c "${installGit} && git clone ${repoUrl} /app && ${script.split("\n").join(" && ")}"
     ports:
       - "${containerPorts}"
     environment:
@@ -1118,6 +1148,8 @@ ${envLines.map((e) => `      - ${e}`).join("\n") || "      []"}
           body: JSON.stringify({
             server_id: serverId,
             agent_credential_id: agentCredId,
+            github_credential_id: githubCredId,
+            github_repo_url: repoUrl,
             project_name: containerName || "github-app",
             compose_content: composeContent,
           }),
@@ -1140,7 +1172,7 @@ ${envLines.map((e) => `      - ${e}`).join("\n") || "      []"}
       </CardHeader>
       <CardContent className="space-y-4">
         {error && <div className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">{error}</div>}
-        {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-700">{success}</div>}
+        {success && <div className="rounded-lg border border-[#37cd84]/30 bg-[#37cd84]/08 text-[#37cd84] p-2.5 text-xs">{success}</div>}
 
         {/* Mode toggle */}
         <div className="flex gap-1 rounded-xl border bg-muted/40 p-1 w-fit">
@@ -1274,7 +1306,7 @@ function PackagesPanel({ servers, credentials }: { servers: ServerType[]; creden
       <CardHeader className="pb-3"><CardTitle className="text-base">📦 Install System Packages</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         {error && <div className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">{error}</div>}
-        {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-700">{success}</div>}
+        {success && <div className="rounded-lg border border-[#37cd84]/30 bg-[#37cd84]/08 text-[#37cd84] p-2.5 text-xs">{success}</div>}
         <div className="grid gap-3 md:grid-cols-2">
           <SelectField label="Server" value={serverId} onChange={(e) => setServerId(e.target.value)}>
             <option value="">Select server…</option>

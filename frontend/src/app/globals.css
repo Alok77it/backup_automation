@@ -1,97 +1,141 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
+
+/* ── Sanity design system — dark-first ──────────────────────────────────────── */
 
 :root {
-  --background: #f8fffb;
-  --foreground: #14532d;
-  --card: #ffffff;
-  --card-foreground: #14532d;
-  --primary: #10b981;
-  --primary-dark: #047857;
-  --primary-foreground: #ffffff;
-  --secondary: #ecfdf5;
-  --secondary-foreground: #065f46;
-  --muted: #f0fdf4;
-  --muted-foreground: #4b7c6a;
-  --accent: #d1fae5;
-  --accent-foreground: #047857;
-  --destructive: #ef4444;
-  --border: #bbf7d0;
-  --ring: #10b981;
-  --mint: #ecfdf5;
-  --sidebar-width: 260px;
+  /* Canvas */
+  --background:        #0b0b0b;
+  --canvas-soft:       #212121;
+  --canvas-paper:      #ededed;
+  --canvas-light:      #ffffff;
+
+  /* Text */
+  --foreground:        #ffffff;
+  --ash:               #b9b9b9;
+  --mute:              #797979;
+  --graphite:          #353535;
+  --slate:             #3c4758;
+
+  /* Surfaces */
+  --card:              #212121;
+  --card-foreground:   #ffffff;
+  --primary:           #f36458;
+  --primary-foreground:#0b0b0b;
+  --secondary:         #212121;
+  --secondary-foreground: #b9b9b9;
+  --muted:             #353535;
+  --muted-foreground:  #797979;
+  --accent:            #f36458;
+  --accent-foreground: #0b0b0b;
+
+  /* Semantic */
+  --destructive:       #dd0000;
+  --success:           #37cd84;
+  --link-blue:         #55beff;
+  --surface-blue:      #afe3ff;
+
+  /* Borders */
+  --border:            #353535;
+  --hairline:          #ededed;
+  --ring:              #f36458;
+
+  --sidebar-width:     260px;
+
+  /* Radius tokens */
+  --radius-xs:         3px;
+  --radius-sm:         4px;
+  --radius-md:         5px;
+  --radius-lg:         6px;
+  --radius-marketing:  12px;
 }
 
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-primary: var(--primary);
-  --color-primary-dark: var(--primary-dark);
-  --color-card: var(--card);
-  --color-border: var(--border);
-  --color-muted: var(--muted);
-  --color-accent: var(--accent);
-  --font-sans: var(--font-geist-sans);
+  --color-background:  var(--background);
+  --color-foreground:  var(--foreground);
+  --color-primary:     var(--primary);
+  --color-card:        var(--card);
+  --color-border:      var(--border);
+  --color-muted:       var(--muted);
+  --color-accent:      var(--accent);
+  --font-sans:         'Inter', system-ui, sans-serif;
+  --font-mono:         'IBM Plex Mono', 'Courier New', monospace;
 }
 
 * {
   border-color: var(--border);
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── Eyebrow / mono label utility ──────────────────────────────────────────── */
+.eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+/* ── Brand dot ─────────────────────────────────────────────────────────────── */
+.brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--primary);
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+/* ── Surfaces ──────────────────────────────────────────────────────────────── */
 .glass {
-  background: #ffffff;
+  background: var(--canvas-soft);
   border: 1px solid var(--border);
-  box-shadow: 0 1px 2px rgba(16, 185, 129, 0.06);
-}
-
-
-.gradient-primary {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-}
-
-.gradient-text {
-  background: linear-gradient(135deg, #059669, #047857);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.sidebar-glow {
-  box-shadow: 2px 0 24px rgba(16, 185, 129, 0.08);
 }
 
 .card-shadow {
-  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.08), 0 4px 16px rgba(16, 185, 129, 0.06);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.35);
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-thumb {
-  background: #6ee7b7;
-  border-radius: 3px;
+/* ── Brand accent (kept for accent spots only) ─────────────────────────────── */
+.gradient-primary {
+  background: var(--primary);
 }
 
+.gradient-text {
+  color: var(--primary);
+}
+
+/* ── Sidebar shadow ────────────────────────────────────────────────────────── */
+.sidebar-glow {
+  box-shadow: 2px 0 24px rgba(0,0,0,0.5);
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #353535; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #797979; }
+
+/* ── Selection ─────────────────────────────────────────────────────────────── */
+::selection { background: rgba(243,100,88,0.28); color: #fff; }
+
+/* ── Tech grid (dark version) ──────────────────────────────────────────────── */
 .tech-grid {
   background-image:
-    linear-gradient(rgba(16, 185, 129, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(16, 185, 129, 0.06) 1px, transparent 1px);
-  background-size: 32px 32px;
-}
-
-
-@keyframes pulse-glow {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
 }
