@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Server, HardDrive, AlertTriangle, Database, Shield } from "lucide-react";
+import { Server, HardDrive, AlertTriangle, Database, Shield, Activity, Brain } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { MetricCard } from "@/components/dashboard/metric-card";
@@ -38,18 +38,51 @@ export default function DashboardPage() {
   }
 
   const storagePct = stats ? (stats.storage_used_bytes / stats.storage_quota_bytes) * 100 : 0;
+  const recentEvents = (
+    <Card className="glass h-full">
+      <CardHeader><CardTitle>Recent Events</CardTitle></CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {events.length === 0 && <p className="text-sm text-gray-500">No recent events</p>}
+          {events.map((e) => (
+            <div key={e.id} className="flex items-center gap-4 rounded-xl border border-[#353535] p-4 transition hover:bg-[#212121]">
+              <Badge variant={e.level === "error" ? "error" : e.level === "warning" ? "warning" : "default"}>{e.level}</Badge>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{e.message}</p>
+                <p className="text-xs text-gray-500">{e.source} - {new Date(e.created_at).toLocaleString()}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <DashboardLayout title="Dashboard">
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <MetricCard title="Total Servers" value={stats?.total_servers ?? 0} icon={Server} delay={0} />
-        <MetricCard title="Active Backups" value={stats?.active_backups ?? 0} icon={HardDrive} delay={0.05} />
-        <MetricCard title="Failed Jobs (24h)" value={stats?.failed_jobs_24h ?? 0} icon={AlertTriangle} subtitle="Requires attention" delay={0.1} />
-        <MetricCard title="Storage Used" value={formatBytes(stats?.storage_used_bytes ?? 0)} icon={Database} subtitle={`${storagePct.toFixed(1)}% of quota`} delay={0.15} />
-        <MetricCard title="Restore Readiness" value={formatPercent(stats?.restore_readiness_avg ?? 0)} icon={Shield} delay={0.2} />
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.75fr)]">
+        <section>
+          <div className="mb-4">
+            <p className="eyebrow">Operations overview</p>
+            <h2 className="mt-1 text-lg font-semibold text-white">Backup command center</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            <MetricCard title="Backup Health" value={formatPercent(stats?.backup_health_avg ?? 0)} icon={Activity} delay={0} />
+            <MetricCard title="Failed Jobs (24h)" value={stats?.failed_jobs_24h ?? 0} icon={AlertTriangle} subtitle="Requires attention" delay={0.05} />
+            <MetricCard title="Active Backups" value={stats?.active_backups ?? 0} icon={HardDrive} delay={0.1} />
+            <MetricCard title="Storage Used" value={formatBytes(stats?.storage_used_bytes ?? 0)} icon={Database} subtitle={`${storagePct.toFixed(1)}% of quota`} delay={0.15} />
+            <MetricCard title="Total Servers" value={stats?.total_servers ?? 0} icon={Server} delay={0.2} />
+            <MetricCard title="AI Risk Alerts" value={stats?.ai_risk_alerts ?? 0} icon={Brain} delay={0.25} />
+            <MetricCard title="Restore Readiness" value={formatPercent(stats?.restore_readiness_avg ?? 0)} icon={Shield} className="md:col-span-2 2xl:col-span-3" delay={0.3} />
+          </div>
+        </section>
+
+        <aside className="xl:pt-[52px]">
+          {recentEvents}
+        </aside>
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+      <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
         <Card className="glass">
           <CardHeader><CardTitle>Backup Trends</CardTitle></CardHeader>
           <CardContent>
@@ -88,24 +121,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
-
-      <Card className="mt-8 glass">
-        <CardHeader><CardTitle>Recent Events</CardTitle></CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {events.length === 0 && <p className="text-sm text-gray-500">No recent events</p>}
-            {events.map((e) => (
-              <div key={e.id} className="flex items-center gap-4 rounded-xl border border-[#353535] p-4 transition hover:bg-[#212121]">
-                <Badge variant={e.level === "error" ? "error" : e.level === "warning" ? "warning" : "default"}>{e.level}</Badge>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{e.message}</p>
-                  <p className="text-xs text-gray-500">{e.source} · {new Date(e.created_at).toLocaleString()}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </DashboardLayout>
   );
 }

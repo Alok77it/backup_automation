@@ -11,23 +11,48 @@ import {
 import { cn } from "@/lib/utils";
 import { clearAuth } from "@/lib/api";
 
-const navItems = [
-  { href: "/dashboard",       label: "Dashboard",         icon: LayoutDashboard },
-  { href: "/infrastructure",  label: "Infrastructure",    icon: Server },
-  { href: "/containers",      label: "Containers",        icon: Container },
-  { href: "/backups",         label: "Backups",           icon: HardDrive },
-  { href: "/restore",         label: "Restore Center",    icon: RotateCcw },
-  { href: "/monitoring",      label: "Monitoring",        icon: Activity },
-  { href: "/ai",              label: "AI Intelligence",   icon: Brain },
-  { href: "/devops-tools",    label: "DevOps Tools",      icon: Wrench },
-  { href: "/execution",       label: "Automation Script", icon: Play },
-  { href: "/logs",            label: "Logs",              icon: ScrollText },
-  { href: "/policies",        label: "Policies",          icon: Shield },
-  { href: "/storage",         label: "Storage",           icon: Database },
-  { href: "/organizations",   label: "Organizations",     icon: Building2 },
-  { href: "/database-backup", label: "DB Backup",         icon: Archive },
-  { href: "/selfmonitor",     label: "System Monitor",    icon: Monitor },
-  { href: "/settings",        label: "Settings",          icon: Settings },
+const navGroups = [
+  {
+    label: "Command",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/monitoring", label: "Monitoring", icon: Activity },
+      { href: "/logs", label: "Logs", icon: ScrollText },
+    ],
+  },
+  {
+    label: "Infrastructure",
+    items: [
+      { href: "/infrastructure", label: "Infrastructure", icon: Server },
+      { href: "/containers", label: "Containers", icon: Container },
+      { href: "/storage", label: "Storage", icon: Database },
+      { href: "/selfmonitor", label: "System Monitor", icon: Monitor },
+    ],
+  },
+  {
+    label: "Backup Ops",
+    items: [
+      { href: "/backups", label: "Backups", icon: HardDrive },
+      { href: "/restore", label: "Restore Center", icon: RotateCcw },
+      { href: "/database-backup", label: "DB Backup", icon: Archive },
+      { href: "/policies", label: "Policies", icon: Shield },
+    ],
+  },
+  {
+    label: "Automation",
+    items: [
+      { href: "/ai", label: "AI Intelligence", icon: Brain },
+      { href: "/devops-tools", label: "DevOps Tools", icon: Wrench },
+      { href: "/execution", label: "Automation Script", icon: Play },
+    ],
+  },
+  {
+    label: "Workspace",
+    items: [
+      { href: "/organizations", label: "Organizations", icon: Building2 },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
 export function Sidebar() {
@@ -54,34 +79,47 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-        {navItems.map((item, i) => {
-          const active = pathname === item.href ||
-            (item.href !== "/" && pathname.startsWith(item.href + "/"));
-          const Icon = item.icon;
-          return (
-            <Link key={item.href} href={item.href}>
-              <motion.div
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.025 }}
-                className={cn(
-                  "relative flex items-center gap-3 rounded-[5px] px-3 py-2.5 text-sm font-medium transition-all duration-150",
-                  active ? "text-white" : "text-[#bdb8c0] hover:text-white hover:bg-[#2d2540]"
-                )}
-                style={active ? { background: "#2d2540" } : {}}
-              >
-                {active && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r"
-                    style={{ background: "#c2ef4e" }} />
-                )}
-                <Icon className="relative h-4 w-4 shrink-0"
-                  style={active ? { color: "#c2ef4e" } : {}} />
-                <span className="relative">{item.label}</span>
-              </motion.div>
-            </Link>
-          );
-        })}
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
+        {navGroups.map((group, groupIndex) => (
+          <div key={group.label} className={cn(groupIndex > 0 && "mt-5")}>
+            <p
+              className="mb-2 px-3 text-[10px] uppercase tracking-widest"
+              style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#7f7788" }}
+            >
+              {group.label}
+            </p>
+            <div className="space-y-0.5">
+              {group.items.map((item, itemIndex) => {
+                const active = pathname === item.href ||
+                  (item.href !== "/" && pathname.startsWith(item.href + "/"));
+                const Icon = item.icon;
+                const sequence = groupIndex * 4 + itemIndex;
+                return (
+                  <Link key={item.href} href={item.href}>
+                    <motion.div
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: sequence * 0.025 }}
+                      className={cn(
+                        "relative flex items-center gap-3 rounded-[5px] px-3 py-2 text-sm font-medium transition-all duration-150",
+                        active ? "text-white" : "text-[#bdb8c0] hover:text-white hover:bg-[#2d2540]"
+                      )}
+                      style={active ? { background: "#2d2540" } : {}}
+                    >
+                      {active && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r"
+                          style={{ background: "#c2ef4e" }} />
+                      )}
+                      <Icon className="relative h-4 w-4 shrink-0"
+                        style={active ? { color: "#c2ef4e" } : {}} />
+                      <span className="relative">{item.label}</span>
+                    </motion.div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* Sign out */}
