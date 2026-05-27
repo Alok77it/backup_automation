@@ -287,6 +287,7 @@ async def _execute_ssh_fallback(*, server, command: str, args: dict, timeout_sec
         private_key,
         server.auth_method,
         timeout_seconds,
+        True,
     )
     output = (
         "[SSH fallback used because the HTTP agent was unreachable]\n"

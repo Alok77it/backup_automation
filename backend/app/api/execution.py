@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from app.core.dependencies import DbSession, OrgMembership, require_permission, verify_csrf
 from app.models.entities import OrganizationMember
+from app.models.entities import Server
 from app.models.devops_entities import DevOpsJob, JobLog, JobStatus, RiskLevel
 from app.services.execution_engine import ExecutionEngine, ExecutionError, execution_engine
 
@@ -81,10 +82,12 @@ async def submit_job(
         command = payload.get("command") or body.command
         if body.job_type == "agent_command" and command in {"package_install", "script_run_approved"}:
             has_agent_token = bool(payload.get("_agent_token_raw") or payload.get("agent_credential_id"))
-            if not has_agent_token:
+            server = await db.get(Server, body.server_id)
+            has_ssh_fallback = bool(server and (server.encrypted_password or server.encrypted_private_key))
+            if not has_agent_token and not has_ssh_fallback:
                 raise HTTPException(
                     status_code=400,
-                    detail="No agent token configured. Select an agent credential or provide agent_token_raw before submitting this command.",
+                    detail="No agent token or SSH credential configured. Select an agent credential, provide agent_token_raw, or add SSH credentials for this server.",
                 )
         job = await execution_engine.submit_job(
             db,

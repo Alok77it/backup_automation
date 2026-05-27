@@ -149,7 +149,9 @@ def run_ssh_command_sync(
     private_key: str | None = None,
     auth_method: str = "password",
     timeout: int = 3600,
+    use_sudo: bool = False,
 ) -> tuple[int, str, str]:
+    import shlex
     import paramiko
 
     client = paramiko.SSHClient()
@@ -162,7 +164,19 @@ def run_ssh_command_sync(
             client.connect(hostname, port=port, username=username, pkey=key, timeout=30)
         else:
             client.connect(hostname, port=port, username=username, password=password, timeout=30)
-        stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
+        exec_command = command
+        get_pty = False
+        if use_sudo and username != "root":
+            quoted_command = shlex.quote(command)
+            if password:
+                exec_command = f"sudo -S -p '' bash -lc {quoted_command}"
+                get_pty = True
+            else:
+                exec_command = f"sudo -n bash -lc {quoted_command}"
+        stdin, stdout, stderr = client.exec_command(exec_command, timeout=timeout, get_pty=get_pty)
+        if use_sudo and username != "root" and password:
+            stdin.write(password + "\n")
+            stdin.flush()
         exit_code = stdout.channel.recv_exit_status()
         return exit_code, stdout.read().decode(), stderr.read().decode()
     finally:
