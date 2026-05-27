@@ -31,7 +31,7 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.services.audit import log_audit
-from app.services.email_service import send_password_reset_email
+from app.services.email_service import send_password_reset_email, send_welcome_notification
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
@@ -198,6 +198,82 @@ async def reset_password(data: ResetPasswordRequest, db: DbSession):
     user.hashed_password = hash_password(data.password)
     await db.commit()
     return MessageResponse(message="Password reset successful")
+
+
+@router.post("/welcome-register", response_model=AuthResponse)
+async def welcome_register(request: Request, data: SignupRequest, db: DbSession, response: Response):
+    """Public registration from the welcome/landing page.
+    Creates platform credentials and sends notification emails."""
+    existing = await db.execute(select(User).where(User.email == data.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+
+    user = User(
+        email=data.email,
+        hashed_password=hash_password(data.password),
+        full_name=data.full_name,
+        is_verified=True,
+    )
+    db.add(user)
+    await db.flush()
+
+    base_slug = _slugify(data.organization_name)
+    slug = base_slug
+    counter = 1
+    while True:
+        check = await db.execute(select(Organization).where(Organization.slug == slug))
+        if not check.scalar_one_or_none():
+            break
+        slug = f"{base_slug}-{counter}"
+        counter += 1
+
+    org = Organization(name=data.organization_name, slug=slug)
+    db.add(org)
+    await db.flush()
+
+    owner_role = Role.OWNER
+    membership = OrganizationMember(
+        organization_id=org.id,
+        user_id=user.id,
+        role=owner_role,
+    )
+    db.add(membership)
+    await db.flush()
+
+    csrf = generate_csrf_token()
+    _set_csrf_cookie(response, csrf)
+
+    await log_audit(
+        db,
+        org.id,
+        "user.welcome_register",
+        "user",
+        user_id=user.id,
+        resource_id=str(user.id),
+        ip_address=request.client.host if request.client else None,
+    )
+
+    # Fire-and-forget notification emails (don't block on email errors)
+    try:
+        await send_welcome_notification(
+            admin_email="aloktrivedi.it@gmail.com",
+            user_name=data.full_name,
+            user_email=data.email,
+            org_name=data.organization_name,
+        )
+    except Exception:
+        pass  # email failure should not break registration
+
+    return AuthResponse(
+        user=UserResponse.model_validate(user),
+        tokens=TokenResponse(
+            access_token=create_access_token(str(user.id), {"org_id": str(org.id)}),
+            refresh_token=create_refresh_token(str(user.id)),
+            csrf_token=csrf,
+        ),
+        organization_id=org.id,
+        role=role_to_str(owner_role),
+    )
 
 
 @router.post("/refresh", response_model=TokenResponse)

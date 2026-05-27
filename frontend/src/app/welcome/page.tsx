@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, useSpring, AnimatePresence, type Variants } from "framer-motion";
 import Link from "next/link";
 
@@ -76,8 +76,355 @@ function GridDots() {
   );
 }
 
+/* ── animated globe ──────────────────────────────────────────────────────── */
+function Globe() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef   = useRef<number>(0);
+  const rotRef    = useRef(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const R = 130; // globe radius
+    const cx = canvas.width  / 2;
+    const cy = canvas.height / 2;
+
+    function project(lat: number, lon: number, rot: number) {
+      const phi   = (lat * Math.PI) / 180;
+      const theta = ((lon + rot) * Math.PI) / 180;
+      const x = R * Math.cos(phi) * Math.sin(theta);
+      const y = R * Math.sin(phi);
+      const z = R * Math.cos(phi) * Math.cos(theta);
+      return { x: cx + x, y: cy - y, z };
+    }
+
+    function drawLatitude(lat: number, rot: number, alpha: number) {
+      ctx!.beginPath();
+      let first = true;
+      for (let lon = -180; lon <= 180; lon += 3) {
+        const p = project(lat, lon, rot);
+        if (p.z < 0) { first = true; continue; }
+        if (first) { ctx!.moveTo(p.x, p.y); first = false; }
+        else ctx!.lineTo(p.x, p.y);
+      }
+      ctx!.strokeStyle = `rgba(98,87,193,${alpha})`;
+      ctx!.lineWidth = 0.6;
+      ctx!.stroke();
+    }
+
+    function drawLongitude(lon: number, rot: number, alpha: number) {
+      ctx!.beginPath();
+      let first = true;
+      for (let lat = -80; lat <= 80; lat += 3) {
+        const p = project(lat, lon, rot);
+        if (p.z < 0) { first = true; continue; }
+        if (first) { ctx!.moveTo(p.x, p.y); first = false; }
+        else ctx!.lineTo(p.x, p.y);
+      }
+      ctx!.strokeStyle = `rgba(98,87,193,${alpha})`;
+      ctx!.lineWidth = 0.6;
+      ctx!.stroke();
+    }
+
+    // Glowing dots on globe surface
+    const dots: { lat: number; lon: number; color: string; size: number }[] = [
+      { lat: 40,  lon: -74,  color: C.lime,   size: 3 },
+      { lat: 51,  lon: 0,    color: C.pink,   size: 2.5 },
+      { lat: 35,  lon: 139,  color: C.lime,   size: 2.5 },
+      { lat: -34, lon: 151,  color: C.violet, size: 2 },
+      { lat: 28,  lon: 77,   color: C.lime,   size: 2.5 },
+      { lat: 1,   lon: 103,  color: C.pink,   size: 2 },
+      { lat: 48,  lon: 2,    color: C.lime,   size: 2 },
+      { lat: 37,  lon: -122, color: C.pink,   size: 3 },
+      { lat: 55,  lon: 37,   color: C.violet, size: 2 },
+      { lat: -23, lon: -46,  color: C.lime,   size: 2 },
+    ];
+
+    function draw() {
+      ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+
+      // Sphere glow
+      const grd = ctx!.createRadialGradient(cx, cy, 0, cx, cy, R);
+      grd.addColorStop(0, "rgba(106,95,193,0.08)");
+      grd.addColorStop(0.7, "rgba(106,95,193,0.04)");
+      grd.addColorStop(1, "transparent");
+      ctx!.beginPath();
+      ctx!.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx!.fillStyle = grd;
+      ctx!.fill();
+
+      // Outer ring
+      ctx!.beginPath();
+      ctx!.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx!.strokeStyle = "rgba(98,87,193,0.35)";
+      ctx!.lineWidth = 1;
+      ctx!.stroke();
+
+      const rot = rotRef.current;
+
+      // Latitude lines
+      for (let lat = -60; lat <= 60; lat += 20) {
+        drawLatitude(lat, rot, 0.3);
+      }
+      // Longitude lines
+      for (let lon = 0; lon < 360; lon += 20) {
+        drawLongitude(lon, rot, 0.3);
+      }
+
+      // Dots
+      for (const d of dots) {
+        const p = project(d.lat, d.lon, rot);
+        if (p.z < 0) continue;
+        const fade = (p.z / R) * 0.8 + 0.2;
+        ctx!.beginPath();
+        ctx!.arc(p.x, p.y, d.size, 0, Math.PI * 2);
+        ctx!.fillStyle = d.color;
+        ctx!.globalAlpha = fade;
+        ctx!.fill();
+
+        // Pulse ring
+        ctx!.beginPath();
+        ctx!.arc(p.x, p.y, d.size + 3 + Math.sin(Date.now() / 600 + d.lat) * 1.5, 0, Math.PI * 2);
+        ctx!.strokeStyle = d.color;
+        ctx!.lineWidth = 0.8;
+        ctx!.globalAlpha = fade * 0.3;
+        ctx!.stroke();
+        ctx!.globalAlpha = 1;
+      }
+
+      rotRef.current += 0.12;
+      animRef.current = requestAnimationFrame(draw);
+    }
+
+    draw();
+    return () => cancelAnimationFrame(animRef.current);
+  }, []);
+
+  return (
+    <canvas ref={canvasRef} width={300} height={300}
+      className="pointer-events-none select-none"
+      style={{ opacity: 0.85 }} />
+  );
+}
+
+/* ── product modal ───────────────────────────────────────────────────────── */
+interface RegisterForm {
+  organization_name: string;
+  full_name: string;
+  email: string;
+  password: string;
+}
+
+function ProductModal({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState<"details" | "register" | "success">("details");
+  const [form, setForm] = useState<RegisterForm>({ organization_name: "", full_name: "", email: "", password: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const field = (key: keyof RegisterForm, label: string, type = "text", placeholder = "") => (
+    <div className="space-y-1.5">
+      <label className="block text-[11px] font-mono uppercase tracking-widest"
+        style={{ color: C.muted }}>{label}</label>
+      <input
+        type={type}
+        required
+        placeholder={placeholder}
+        value={form[key]}
+        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+        className="w-full rounded-[5px] border bg-[#150f23] px-3 py-2.5 text-sm text-white placeholder:text-[#3f3849] focus:outline-none focus:ring-1 focus:ring-[#c2ef4e] focus:border-[#c2ef4e]"
+        style={{ borderColor: C.border }}
+      />
+    </div>
+  );
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/welcome-register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Registration failed. Please try again.");
+      }
+      setStep("success");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const tools = [
+    { icon: "🛡️", label: "AI Backup" },
+    { icon: "📊", label: "Monitoring" },
+    { icon: "🤖", label: "AI Engine" },
+    { icon: "🐳", label: "Containers" },
+    { icon: "🔧", label: "DevOps Tools" },
+    { icon: "⚡", label: "Automation" },
+  ];
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ background: "rgba(10,6,20,0.85)", backdropFilter: "blur(8px)" }}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.94, y: 20 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className="relative w-full max-w-lg rounded-[16px] overflow-hidden"
+        style={{ background: C.mid, border: `1px solid ${C.border}` }}>
+
+        {/* Close button */}
+        <button onClick={onClose}
+          className="absolute top-4 right-4 z-10 flex h-7 w-7 items-center justify-center rounded-full text-sm transition-all"
+          style={{ background: C.surface, color: C.muted }}
+          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = "#fff"}
+          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = C.muted}>
+          ✕
+        </button>
+
+        {step === "details" && (
+          <div className="p-8">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex h-10 w-10 items-center justify-center rounded-[8px]"
+                style={{ background: C.lime }}>
+                <span className="text-sm font-bold" style={{ color: C.bg }}>io</span>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">InfiOps Platform</h3>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: C.pink }} />
+                  <span className="text-xs font-mono" style={{ color: C.pink }}>Coming Soon · Beta</span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-sm mb-6 leading-relaxed" style={{ color: C.muted }}>
+              A unified platform for AI-powered backup, real-time monitoring, container management,
+              and DevOps automation — built for startups and engineering teams.
+            </p>
+
+            {/* Tool grid */}
+            <div className="grid grid-cols-3 gap-2.5 mb-6">
+              {tools.map(t => (
+                <div key={t.label} className="flex items-center gap-2 rounded-[7px] px-3 py-2.5"
+                  style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+                  <span className="text-base">{t.icon}</span>
+                  <span className="text-xs font-medium" style={{ color: C.muted }}>{t.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Globe + stats */}
+            <div className="flex items-center justify-between rounded-[10px] px-4 py-3 mb-6"
+              style={{ background: C.bg, border: `1px solid ${C.border}` }}>
+              <div className="space-y-1">
+                <p className="text-xs font-mono" style={{ color: C.faint }}>Launch status</p>
+                <p className="text-sm font-semibold" style={{ color: C.lime }}>Early Access · Q3 2026</p>
+                <p className="text-xs" style={{ color: C.muted }}>Be first to get access</p>
+              </div>
+              <div className="flex gap-4">
+                <div className="text-center">
+                  <p className="text-lg font-bold text-white">6</p>
+                  <p className="text-[10px] font-mono" style={{ color: C.faint }}>Modules</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-white">∞</p>
+                  <p className="text-[10px] font-mono" style={{ color: C.faint }}>Servers</p>
+                </div>
+              </div>
+            </div>
+
+            <button onClick={() => setStep("register")}
+              className="w-full rounded-[6px] py-3 text-sm font-bold transition-all hover:scale-[1.02]"
+              style={{ background: C.lime, color: C.bg, boxShadow: `0 0 20px ${C.lime}35` }}>
+              Register for Early Access →
+            </button>
+          </div>
+        )}
+
+        {step === "register" && (
+          <div className="p-8">
+            <div className="flex items-center gap-2 mb-6">
+              <button onClick={() => setStep("details")}
+                className="text-sm transition-colors"
+                style={{ color: C.faint }}
+                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = C.muted}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = C.faint}>
+                ← Back
+              </button>
+              <span className="text-sm font-semibold text-white">Create your account</span>
+            </div>
+
+            <form onSubmit={handleRegister} className="space-y-4">
+              {field("organization_name", "Organization / Company Name", "text", "Acme Inc.")}
+              {field("full_name", "Full Name", "text", "Your name")}
+              {field("email", "Work Email", "email", "you@company.com")}
+              {field("password", "Password", "password", "Min. 8 characters")}
+
+              {error && (
+                <div className="rounded-[5px] px-3 py-2 text-xs"
+                  style={{ background: "rgba(240,70,70,0.1)", border: "1px solid rgba(240,70,70,0.3)", color: "#f78080" }}>
+                  {error}
+                </div>
+              )}
+
+              <button type="submit" disabled={loading}
+                className="w-full rounded-[6px] py-3 text-sm font-bold transition-all disabled:opacity-60 hover:scale-[1.02]"
+                style={{ background: C.lime, color: C.bg, boxShadow: `0 0 20px ${C.lime}30` }}>
+                {loading ? "Creating account…" : "Create Account & Register →"}
+              </button>
+
+              <p className="text-center text-[11px]" style={{ color: C.faint }}>
+                Your credentials will work on the platform when it launches.
+              </p>
+            </form>
+          </div>
+        )}
+
+        {step === "success" && (
+          <div className="p-10 text-center">
+            <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", duration: 0.5 }}
+              className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full text-2xl"
+              style={{ background: `${C.lime}20`, border: `2px solid ${C.lime}60` }}>
+              ✓
+            </motion.div>
+            <h3 className="text-xl font-bold text-white mb-3">You&apos;re on the list!</h3>
+            <p className="text-sm leading-relaxed mb-6" style={{ color: C.muted }}>
+              Your InfiOps account has been created. We&apos;ll send you an email with updates and
+              your access details when we launch. Stay tuned!
+            </p>
+            <div className="rounded-[8px] px-4 py-3 mb-6 text-sm"
+              style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.muted }}>
+              📧 Check your inbox — a welcome email is on its way.
+            </div>
+            <button onClick={onClose}
+              className="rounded-[6px] px-6 py-2.5 text-sm font-semibold transition-all hover:scale-105"
+              style={{ background: C.lime, color: C.bg }}>
+              Done
+            </button>
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
+
 /* ── nav ─────────────────────────────────────────────────────────────────── */
-function Nav() {
+function Nav({ onOpenModal }: { onOpenModal: () => void }) {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const h = () => setScrolled(window.scrollY > 20);
@@ -105,14 +452,21 @@ function Nav() {
 
       {/* Links */}
       <div className="hidden md:flex items-center gap-8">
-        {["Platform", "Products", "Docs", "About"].map(l => (
-          <a key={l} href="#" className="text-sm font-medium transition-colors"
+        {[["Platform", "#features"], ["Products", "#"]].map(([l, h]) => (
+          <a key={l} href={h} className="text-sm font-medium transition-colors"
             style={{ color: C.muted }}
             onMouseEnter={e => (e.currentTarget as HTMLAnchorElement).style.color = "#fff"}
             onMouseLeave={e => (e.currentTarget as HTMLAnchorElement).style.color = C.muted}>
             {l}
           </a>
         ))}
+        <button onClick={onOpenModal}
+          className="text-sm font-medium transition-colors"
+          style={{ color: C.lime, background: "none", border: "none", cursor: "pointer" }}
+          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = "#d4f76a"}
+          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = C.lime}>
+          Early Access ✦
+        </button>
       </div>
 
       <Link href="/login"
@@ -127,7 +481,7 @@ function Nav() {
 }
 
 /* ── hero ────────────────────────────────────────────────────────────────── */
-function Hero() {
+function Hero({ onOpenModal }: { onOpenModal: () => void }) {
   const mouse = useMouse();
   const px = useSpring(0, { stiffness: 60, damping: 20 });
   const py = useSpring(0, { stiffness: 60, damping: 20 });
@@ -197,10 +551,11 @@ function Hero() {
       <div className="relative z-10 flex flex-col items-center text-center px-6 max-w-5xl">
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5 }}
-          className="mb-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium"
-          style={{ background: `${C.lime}15`, border: `1px solid ${C.lime}40`, color: C.lime }}>
-          <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: C.lime }} />
-          Now in production · Used by 200+ teams
+          className="mb-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium cursor-pointer select-none"
+          style={{ background: `${C.pink}15`, border: `1px solid ${C.pink}40`, color: C.pink }}
+          onClick={onOpenModal}>
+          <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: C.pink }} />
+          Coming Soon · Beta Registration Open ✦
         </motion.div>
 
         <motion.h1 className="text-5xl md:text-7xl lg:text-8xl font-bold text-white leading-[1.05] tracking-tight"
@@ -232,11 +587,11 @@ function Hero() {
         <motion.div className="mt-10 flex flex-wrap items-center justify-center gap-4"
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.4 }}>
-          <Link href="/login"
+          <button onClick={onOpenModal}
             className="inline-flex items-center gap-2 rounded-[6px] px-7 py-3.5 text-base font-bold shadow-lg transition-all hover:scale-105"
             style={{ background: C.lime, color: C.bg, boxShadow: `0 0 30px ${C.lime}40` }}>
-            Get started free →
-          </Link>
+            Register for Early Access →
+          </button>
           <a href="#features"
             className="inline-flex items-center gap-2 rounded-[6px] px-7 py-3.5 text-base font-semibold transition-all border"
             style={{ background: "transparent", color: "#fff", borderColor: C.border }}
@@ -257,6 +612,51 @@ function Hero() {
   );
 }
 
+/* ── services strip ──────────────────────────────────────────────────────── */
+const services = [
+  { icon: "🤖", title: "AI Automation Tools",  desc: "We build intelligent automation solutions — from backup pipelines to workflow orchestration — tailored for startups and growing engineering teams." },
+  { icon: "🌐", title: "Web Development",      desc: "Full-stack web applications, SaaS products, and custom platforms. Clean code, fast delivery, scalable architecture." },
+  { icon: "⚙️", title: "DevOps & Infrastructure", desc: "CI/CD pipelines, cloud setup, container orchestration, and monitoring. We make your infrastructure boring — in the best way possible." },
+];
+
+function Services() {
+  const { ref, inView } = useInView();
+  return (
+    <section className="relative py-20 px-6 overflow-hidden" ref={ref}
+      style={{ background: C.mid, borderTop: `1px solid ${C.border}` }}>
+      <div className="pointer-events-none absolute inset-0"
+        style={{ background: `radial-gradient(ellipse 70% 50% at 20% 50%, ${C.violet}12, transparent)` }} />
+      <div className="relative z-10 max-w-6xl mx-auto">
+        <motion.div className="text-center mb-12"
+          variants={fadeUp} initial="hidden" animate={inView ? "show" : "hidden"}>
+          <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: C.violet }}>
+            What we do
+          </p>
+          <h2 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+            AI automation &amp; web development
+          </h2>
+          <p className="mt-3 text-base max-w-xl mx-auto" style={{ color: C.muted }}>
+            InfiOps is a technology company building automation tools and web products for modern teams.
+          </p>
+        </motion.div>
+
+        <div className="grid md:grid-cols-3 gap-5">
+          {services.map((s, i) => (
+            <motion.div key={s.title}
+              variants={stagger(i * 0.1)} initial="hidden" animate={inView ? "show" : "hidden"}
+              className="rounded-[10px] p-6"
+              style={{ background: C.bg, border: `1px solid ${C.border}` }}>
+              <div className="text-3xl mb-4">{s.icon}</div>
+              <h3 className="text-base font-semibold text-white mb-2">{s.title}</h3>
+              <p className="text-sm leading-relaxed" style={{ color: C.muted }}>{s.desc}</p>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ── features ────────────────────────────────────────────────────────────── */
 const features = [
   { icon: "🛡️", title: "AI Backup & Recovery",    desc: "Automated backups across any server with AI-driven scheduling, compression, and one-click restore." },
@@ -267,7 +667,7 @@ const features = [
   { icon: "⚡", title: "Automation Scripts",      desc: "Run shell scripts, install packages, execute GitHub repos — all with approval flows and audit logs." },
 ];
 
-function Features() {
+function Features({ onOpenModal }: { onOpenModal: () => void }) {
   const { ref, inView } = useInView();
   return (
     <section id="features" className="relative py-28 px-6 overflow-hidden" style={{ background: C.bg }} ref={ref}>
@@ -286,7 +686,7 @@ function Features() {
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-12">
           {features.map((f, i) => (
             <motion.div key={f.title}
               variants={stagger(i * 0.08)} initial="hidden" animate={inView ? "show" : "hidden"}
@@ -301,13 +701,41 @@ function Features() {
             </motion.div>
           ))}
         </div>
+
+        {/* Globe + CTA */}
+        <motion.div
+          variants={fadeUp} initial="hidden" animate={inView ? "show" : "hidden"}
+          className="flex flex-col md:flex-row items-center gap-10 rounded-[16px] p-8 md:p-10"
+          style={{ background: C.mid, border: `1px solid ${C.border}` }}>
+          <div className="flex-shrink-0 flex items-center justify-center">
+            <Globe />
+          </div>
+          <div className="flex-1 text-center md:text-left">
+            <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-mono mb-4"
+              style={{ background: `${C.pink}15`, border: `1px solid ${C.pink}30`, color: C.pink }}>
+              Coming soon · Q3 2026
+            </div>
+            <h3 className="text-2xl md:text-3xl font-bold text-white mb-3">
+              Be first in line
+            </h3>
+            <p className="text-sm leading-relaxed mb-6" style={{ color: C.muted }}>
+              The platform is in final stages. Register now to get early access, lock in your
+              credentials, and be notified the moment we launch.
+            </p>
+            <button onClick={onOpenModal}
+              className="inline-flex items-center gap-2 rounded-[6px] px-6 py-3 text-sm font-bold transition-all hover:scale-105"
+              style={{ background: C.lime, color: C.bg, boxShadow: `0 0 20px ${C.lime}30` }}>
+              Register for Early Access →
+            </button>
+          </div>
+        </motion.div>
       </div>
     </section>
   );
 }
 
 /* ── CTA band ─────────────────────────────────────────────────────────────── */
-function CtaBand() {
+function CtaBand({ onOpenModal }: { onOpenModal: () => void }) {
   const { ref, inView } = useInView();
   return (
     <section className="py-20 px-6 relative overflow-hidden" style={{ background: C.mid }} ref={ref}>
@@ -319,7 +747,7 @@ function CtaBand() {
           variants={fadeUp} initial="hidden" animate={inView ? "show" : "hidden"}>
           <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-mono mb-6"
             style={{ background: `${C.lime}12`, border: `1px solid ${C.lime}30`, color: C.lime }}>
-            For startups & engineering teams
+            For startups &amp; engineering teams
           </div>
           <h2 className="text-3xl md:text-5xl font-bold text-white tracking-tight mb-4">
             Built for developers<br />
@@ -328,11 +756,11 @@ function CtaBand() {
           <p className="text-base mb-8 max-w-lg mx-auto" style={{ color: C.muted }}>
             Stop juggling five tools. Backup, monitor, automate, and deploy — from one dashboard your whole team can use.
           </p>
-          <Link href="/login"
+          <button onClick={onOpenModal}
             className="inline-flex items-center gap-2 rounded-[6px] px-8 py-3.5 text-base font-bold transition-all hover:scale-105"
             style={{ background: C.lime, color: C.bg, boxShadow: `0 0 28px ${C.lime}35` }}>
-            Start free today →
-          </Link>
+            Register for Early Access →
+          </button>
         </motion.div>
       </div>
     </section>
@@ -379,7 +807,7 @@ function Reviews() {
               className="rounded-[12px] p-8"
               style={{ background: C.mid, border: `1px solid ${C.border}` }}>
               <div className="flex text-xl mb-5" style={{ color: r.color }}>★★★★★</div>
-              <p className="text-base leading-relaxed mb-6" style={{ color: C.muted }}>"{r.text}"</p>
+              <p className="text-base leading-relaxed mb-6" style={{ color: C.muted }}>&ldquo;{r.text}&rdquo;</p>
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-[6px] text-sm font-bold"
                   style={{ background: r.color, color: C.bg }}>
@@ -425,7 +853,7 @@ function Newsletter() {
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
               className="inline-flex items-center gap-2 rounded-[6px] px-6 py-3 text-sm font-semibold"
               style={{ background: `${C.lime}15`, border: `1px solid ${C.lime}40`, color: C.lime }}>
-              ✓ You're subscribed! Updates coming soon.
+              ✓ You&apos;re subscribed! Updates coming soon.
             </motion.div>
           ) : (
             <form onSubmit={e => { e.preventDefault(); if (email) setSent(true); }}
@@ -476,7 +904,7 @@ function Footer() {
               <span className="text-base font-bold text-white">InfiOps</span>
             </div>
             <p className="text-sm leading-relaxed mb-6" style={{ color: C.muted }}>
-              AI-powered automation for modern engineering teams.
+              AI automation tools &amp; web development for modern engineering teams.
             </p>
             <div className="flex items-center gap-3">
               {socials.map(s => (
@@ -526,15 +954,24 @@ function Footer() {
 
 /* ── page ─────────────────────────────────────────────────────────────────── */
 export default function WelcomePage() {
+  const [modalOpen, setModalOpen] = useState(false);
+  const openModal  = useCallback(() => setModalOpen(true),  []);
+  const closeModal = useCallback(() => setModalOpen(false), []);
+
   return (
     <div style={{ background: C.bg, minHeight: "100vh" }}>
-      <Nav />
-      <Hero />
-      <Features />
-      <CtaBand />
+      <Nav onOpenModal={openModal} />
+      <Hero onOpenModal={openModal} />
+      <Services />
+      <Features onOpenModal={openModal} />
+      <CtaBand onOpenModal={openModal} />
       <Reviews />
       <Newsletter />
       <Footer />
+
+      <AnimatePresence>
+        {modalOpen && <ProductModal onClose={closeModal} />}
+      </AnimatePresence>
     </div>
   );
 }

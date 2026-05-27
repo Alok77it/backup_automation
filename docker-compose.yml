@@ -42,6 +42,12 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-backupintel}:${POSTGRES_PASSWORD:-backupintel_secret}@postgres:5432/${POSTGRES_DB:-backup_intelligence}
       REDIS_URL: redis://redis:6379/0
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: aloktrivedi.it@gmail.com
+      SMTP_PASSWORD: mbrszpmjoctpbvpj
+      SMTP_FROM: "InfiOps <aloktrivedi.it@gmail.com>"
+      SMTP_TLS: "false" 
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
     volumes:
