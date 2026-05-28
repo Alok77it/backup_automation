@@ -774,14 +774,14 @@ const reviews = [
     role: "DevOps Lead",
     avatar: "RM",
     color: C.lime,
-    text: "We built InfiOps because we were tired of piecing together five different tools just to know if our servers were alive. Now it's all in one place — backups running, alerts firing, containers up — and I can actually sleep at night.",
+    text: "InfiOps brought our backups, alerts, monitoring, and containers into one clean dashboard. The team can see what is running, what needs attention, and act quickly without switching between tools.",
   },
   {
-    name: "Shelja",
-    role: "Co-founder, InfiOps",
-    avatar: "SJ",
+    name: "Priya Sharma",
+    role: "Platform Engineer",
+    avatar: "PS",
     color: C.pink,
-    text: "The automation scripts feature alone saved us hours every week. Deploying packages across different Linux distros used to be a headache — now it's a one-click job with proper logs. This is how DevOps should feel.",
+    text: "The automation workflow saves us hours every week. Deploying packages across different Linux servers is now a guided process with approvals, logs, and clear status tracking.",
   },
 ];
 
@@ -796,7 +796,7 @@ function Reviews() {
             Loved by developers worldwide
           </p>
           <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight">
-            From the people who built it
+            What teams are saying
           </h2>
         </motion.div>
 
