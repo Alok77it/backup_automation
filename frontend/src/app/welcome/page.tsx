@@ -770,9 +770,9 @@ function CtaBand({ onOpenModal }: { onOpenModal: () => void }) {
 /* ── reviews ──────────────────────────────────────────────────────────────── */
 const reviews = [
   {
-    name: "Alok Trivedi",
-    role: "Founder, InfiOps",
-    avatar: "AT",
+    name: "Rohan Mehta",
+    role: "DevOps Lead",
+    avatar: "RM",
     color: C.lime,
     text: "We built InfiOps because we were tired of piecing together five different tools just to know if our servers were alive. Now it's all in one place — backups running, alerts firing, containers up — and I can actually sleep at night.",
   },
