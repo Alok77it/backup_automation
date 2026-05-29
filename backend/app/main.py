@@ -10,7 +10,24 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.api import ai, alerts, auth, backups, dashboard, logs, monitoring, organizations, policies, restore, servers, storage, selfmonitor
+from app.api import (
+    ai,
+    alerts,
+    auth,
+    backups,
+    dashboard,
+    incidents,
+    logs,
+    monitoring,
+    organizations,
+    policies,
+    reliability,
+    restore,
+    security_posture,
+    selfmonitor,
+    servers,
+    storage,
+)
 from app.core.config import get_settings
 from app.core.database import engine
 
@@ -82,6 +99,9 @@ app.include_router(monitoring.router, prefix="/api")
 app.include_router(storage.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(selfmonitor.router, prefix="/api")
+app.include_router(incidents.router, prefix="/api")
+app.include_router(reliability.router, prefix="/api")
+app.include_router(security_posture.router, prefix="/api")
 
 # DevOps Control Plane extension (additive only - no existing code modified)
 from app.app_extension import register_devops_extension  # noqa: E402

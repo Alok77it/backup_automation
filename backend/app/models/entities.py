@@ -385,6 +385,103 @@ class StorageUsage(Base):
     compression_ratio: Mapped[float] = mapped_column(Float, default=1.0)
 
 
+class Incident(Base):
+    __tablename__ = "incidents"
+    __table_args__ = (
+        Index("ix_incidents_org_status_severity", "organization_id", "status", "severity"),
+        Index("ix_incidents_org_fingerprint", "organization_id", "fingerprint"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    server_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("servers.id", ondelete="SET NULL"))
+    backup_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("backups.id", ondelete="SET NULL"))
+    backup_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("backup_runs.id", ondelete="SET NULL"))
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    incident_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), default="warning")
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    fingerprint: Mapped[str] = mapped_column(String(255), nullable=False)
+    root_cause_summary: Mapped[str | None] = mapped_column(Text)
+    impact_summary: Mapped[str | None] = mapped_column(Text)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, default=dict)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    events: Mapped[list["IncidentEvent"]] = relationship(back_populates="incident")
+    recommendations: Mapped[list["IncidentRecommendation"]] = relationship(back_populates="incident")
+
+
+class IncidentEvent(Base):
+    __tablename__ = "incident_events"
+    __table_args__ = (Index("ix_incident_events_incident_created", "incident_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    incident_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("incidents.id", ondelete="CASCADE"), index=True)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    incident: Mapped["Incident"] = relationship(back_populates="events")
+
+
+class IncidentRecommendation(Base):
+    __tablename__ = "incident_recommendations"
+    __table_args__ = (Index("ix_incident_recommendations_incident", "incident_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    incident_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("incidents.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    action_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(20), default="low")
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    payload_json: Mapped[dict | None] = mapped_column(JSON, default=dict)
+    result_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    incident: Mapped["Incident"] = relationship(back_populates="recommendations")
+
+
+class IncidentReport(Base):
+    __tablename__ = "incident_reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    incident_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("incidents.id", ondelete="CASCADE"), index=True)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    timeline_json: Mapped[list | None] = mapped_column(JSON, default=list)
+    actions_json: Mapped[list | None] = mapped_column(JSON, default=list)
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SecurityFinding(Base):
+    __tablename__ = "security_findings"
+    __table_args__ = (
+        Index("ix_security_findings_org_status", "organization_id", "status"),
+        Index("ix_security_findings_org_key", "organization_id", "finding_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    finding_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), default="medium")
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    resource_type: Mapped[str | None] = mapped_column(String(50))
+    resource_id: Mapped[str | None] = mapped_column(String(100))
+    recommendation: Mapped[str | None] = mapped_column(Text)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, default=dict)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class AIConversation(Base):
     __tablename__ = "ai_conversations"
 

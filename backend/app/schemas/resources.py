@@ -365,3 +365,106 @@ class DatabaseBackupRequest(BaseModel):
     db_name: str
     target_path: str | None = None
     compression: bool = True
+
+
+class IncidentEventResponse(BaseModel):
+    id: uuid.UUID
+    event_type: str
+    title: str
+    message: str
+    metadata_json: dict | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class IncidentRecommendationResponse(BaseModel):
+    id: uuid.UUID
+    title: str
+    description: str | None
+    action_type: str
+    risk_level: str
+    status: str
+    payload_json: dict | None
+    result_message: str | None
+    created_at: datetime
+    executed_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class IncidentResponse(BaseModel):
+    id: uuid.UUID
+    title: str
+    incident_type: str
+    severity: str
+    status: str
+    server_id: uuid.UUID | None
+    backup_id: uuid.UUID | None
+    backup_run_id: uuid.UUID | None
+    root_cause_summary: str | None
+    impact_summary: str | None
+    metadata_json: dict | None
+    first_seen_at: datetime
+    last_seen_at: datetime
+    resolved_at: datetime | None
+    events: list[IncidentEventResponse] = Field(default_factory=list)
+    recommendations: list[IncidentRecommendationResponse] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
+
+
+class IncidentReportResponse(BaseModel):
+    id: uuid.UUID
+    incident_id: uuid.UUID
+    summary: str
+    timeline_json: list | None
+    actions_json: list | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ReliabilitySummaryResponse(BaseModel):
+    slo_score: float
+    backup_success_rate_24h: float
+    backup_success_rate_7d: float
+    backup_success_rate_30d: float
+    failed_jobs_24h: int
+    active_incidents: int
+    critical_incidents: int
+    last_successful_backup_at: datetime | None
+    last_successful_backup_age_hours: float | None
+    rpo_status: str
+    rto_status: str
+    storage_used_gb: float
+    storage_quota_gb: float
+    storage_forecast_days: float | None
+    risky_servers: list[dict[str, Any]]
+    risky_backups: list[dict[str, Any]]
+
+
+class SecurityFindingResponse(BaseModel):
+    id: uuid.UUID | None = None
+    finding_key: str
+    title: str
+    description: str
+    severity: str
+    status: str = "open"
+    resource_type: str | None = None
+    resource_id: str | None = None
+    recommendation: str | None = None
+    metadata_json: dict | None = None
+    first_seen_at: datetime | None = None
+    last_seen_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class SecurityPostureResponse(BaseModel):
+    score: float
+    high_count: int
+    medium_count: int
+    low_count: int
+    open_findings: int
+    findings: list[SecurityFindingResponse]

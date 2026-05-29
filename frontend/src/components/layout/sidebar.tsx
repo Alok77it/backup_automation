@@ -6,34 +6,43 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, Server, HardDrive, RotateCcw, Activity,
   Brain, ScrollText, Shield, Database, Building2, Settings,
-  Monitor, Archive, LogOut, Container, Wrench, Play,
+  Monitor, Archive, LogOut, Container, Wrench, Play, Siren,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { clearAuth } from "@/lib/api";
 
 const navGroups = [
   {
-    label: "Command",
+    label: "Operate",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/incidents", label: "Incidents", icon: Siren },
+      { href: "/reliability", label: "Reliability", icon: Activity },
+      { href: "/security", label: "Security", icon: Shield },
+      { href: "/ai", label: "AI Intelligence", icon: Brain },
+    ],
+  },
+  {
+    label: "Observe",
+    items: [
       { href: "/monitoring", label: "Monitoring", icon: Activity },
       { href: "/logs", label: "Logs", icon: ScrollText },
+      { href: "/selfmonitor", label: "System Monitor", icon: Monitor },
     ],
   },
   {
     label: "Infrastructure",
     items: [
-      { href: "/infrastructure", label: "Infrastructure", icon: Server },
+      { href: "/infrastructure", label: "Servers", icon: Server },
       { href: "/containers", label: "Containers", icon: Container },
       { href: "/storage", label: "Storage", icon: Database },
-      { href: "/selfmonitor", label: "System Monitor", icon: Monitor },
     ],
   },
   {
-    label: "Backup Ops",
+    label: "Backup",
     items: [
       { href: "/backups", label: "Backups", icon: HardDrive },
-      { href: "/restore", label: "Restore Center", icon: RotateCcw },
+      { href: "/restore", label: "Restore", icon: RotateCcw },
       { href: "/database-backup", label: "DB Backup", icon: Archive },
       { href: "/policies", label: "Policies", icon: Shield },
     ],
@@ -41,9 +50,8 @@ const navGroups = [
   {
     label: "Automation",
     items: [
-      { href: "/ai", label: "AI Intelligence", icon: Brain },
       { href: "/devops-tools", label: "DevOps Tools", icon: Wrench },
-      { href: "/execution", label: "Automation Script", icon: Play },
+      { href: "/execution", label: "Scripts", icon: Play },
     ],
   },
   {

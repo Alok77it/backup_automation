@@ -30,6 +30,12 @@ PERMISSIONS = {
     "settings:read": {Role.OWNER, Role.ADMIN, Role.OPERATOR, Role.VIEWER},
     "settings:write": {Role.OWNER, Role.ADMIN},
     "audit:read": {Role.OWNER, Role.ADMIN},
+    "incident:read": {Role.OWNER, Role.ADMIN, Role.OPERATOR, Role.VIEWER},
+    "incident:manage": {Role.OWNER, Role.ADMIN, Role.OPERATOR},
+    "reliability:read": {Role.OWNER, Role.ADMIN, Role.OPERATOR, Role.VIEWER},
+    "security:read": {Role.OWNER, Role.ADMIN},
+    "security:manage": {Role.OWNER, Role.ADMIN},
+    "repair:execute": {Role.OWNER, Role.ADMIN, Role.OPERATOR},
 }
 
 
