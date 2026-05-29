@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -37,6 +37,37 @@ def _severity_from_disk(disk_percent: float | None) -> str:
     if disk_percent >= 90:
         return "error"
     return "warning"
+
+
+async def ops_tables_ready(db: AsyncSession) -> bool:
+    result = await db.execute(
+        text(
+            "select "
+            "to_regclass('public.incidents') is not null "
+            "and to_regclass('public.incident_events') is not null "
+            "and to_regclass('public.incident_recommendations') is not null "
+            "and to_regclass('public.security_findings') is not null"
+        )
+    )
+    return bool(result.scalar())
+
+
+def _score_security_findings(findings: list[dict[str, Any] | SecurityFinding]) -> dict[str, Any]:
+    def get(item: dict[str, Any] | SecurityFinding, key: str) -> Any:
+        return item.get(key) if isinstance(item, dict) else getattr(item, key)
+
+    open_findings = [f for f in findings if get(f, "status") == "open"]
+    high = sum(1 for f in open_findings if get(f, "severity") == "high")
+    medium = sum(1 for f in open_findings if get(f, "severity") == "medium")
+    low = sum(1 for f in open_findings if get(f, "severity") == "low")
+    score = max(0.0, 100.0 - high * 18 - medium * 9 - low * 4)
+    return {
+        "score": round(score, 1),
+        "high_count": high,
+        "medium_count": medium,
+        "low_count": low,
+        "open_findings": len(open_findings),
+    }
 
 
 def _classify_backup_failure(error: str | None, disk_percent: float | None) -> tuple[str, str, str]:
@@ -150,6 +181,8 @@ async def _upsert_incident(
 
 
 async def sync_incidents(db: AsyncSession, organization_id: uuid.UUID) -> None:
+    if not await ops_tables_ready(db):
+        return
     since = _now() - timedelta(days=14)
     failed_runs = await db.execute(
         select(BackupRun, Backup)
@@ -234,6 +267,8 @@ async def sync_incidents(db: AsyncSession, organization_id: uuid.UUID) -> None:
 
 
 async def list_incidents(db: AsyncSession, organization_id: uuid.UUID) -> list[Incident]:
+    if not await ops_tables_ready(db):
+        return []
     await sync_incidents(db, organization_id)
     result = await db.execute(
         select(Incident)
@@ -246,6 +281,8 @@ async def list_incidents(db: AsyncSession, organization_id: uuid.UUID) -> list[I
 
 
 async def get_incident(db: AsyncSession, organization_id: uuid.UUID, incident_id: uuid.UUID) -> Incident | None:
+    if not await ops_tables_ready(db):
+        return None
     await sync_incidents(db, organization_id)
     result = await db.execute(
         select(Incident)
@@ -256,7 +293,9 @@ async def get_incident(db: AsyncSession, organization_id: uuid.UUID, incident_id
 
 
 async def reliability_summary(db: AsyncSession, organization_id: uuid.UUID) -> dict[str, Any]:
-    await sync_incidents(db, organization_id)
+    tables_ready = await ops_tables_ready(db)
+    if tables_ready:
+        await sync_incidents(db, organization_id)
     now = _now()
 
     async def success_rate(days: int) -> float:
@@ -281,8 +320,11 @@ async def reliability_summary(db: AsyncSession, organization_id: uuid.UUID) -> d
             BackupRun.started_at >= now - timedelta(hours=24),
         )
     )
-    active_incidents = await db.scalar(select(func.count(Incident.id)).where(Incident.organization_id == organization_id, Incident.status != "resolved"))
-    critical_incidents = await db.scalar(select(func.count(Incident.id)).where(Incident.organization_id == organization_id, Incident.status != "resolved", Incident.severity == "critical"))
+    active_incidents = 0
+    critical_incidents = 0
+    if tables_ready:
+        active_incidents = await db.scalar(select(func.count(Incident.id)).where(Incident.organization_id == organization_id, Incident.status != "resolved")) or 0
+        critical_incidents = await db.scalar(select(func.count(Incident.id)).where(Incident.organization_id == organization_id, Incident.status != "resolved", Incident.severity == "critical")) or 0
     last_success = await db.scalar(
         select(func.max(BackupRun.completed_at))
         .join(Backup, BackupRun.backup_id == Backup.id)
@@ -402,6 +444,10 @@ async def generate_security_findings(db: AsyncSession, organization_id: uuid.UUI
 
 async def security_posture(db: AsyncSession, organization_id: uuid.UUID) -> dict[str, Any]:
     generated = await generate_security_findings(db, organization_id)
+    if not await ops_tables_ready(db):
+        normalized = [{"status": "open", "metadata_json": {}, **item} for item in generated]
+        return {**_score_security_findings(normalized), "findings": normalized}
+
     now = _now()
     persisted: list[SecurityFinding] = []
     for item in generated:
@@ -427,12 +473,7 @@ async def security_posture(db: AsyncSession, organization_id: uuid.UUID) -> dict
             db.add(finding)
             persisted.append(finding)
     await db.flush()
-    open_findings = [f for f in persisted if f.status == "open"]
-    high = sum(1 for f in open_findings if f.severity == "high")
-    medium = sum(1 for f in open_findings if f.severity == "medium")
-    low = sum(1 for f in open_findings if f.severity == "low")
-    score = max(0.0, 100.0 - high * 18 - medium * 9 - low * 4)
-    return {"score": round(score, 1), "high_count": high, "medium_count": medium, "low_count": low, "open_findings": len(open_findings), "findings": persisted}
+    return {**_score_security_findings(persisted), "findings": persisted}
 
 
 async def build_incident_report(db: AsyncSession, incident: Incident, user_id: uuid.UUID | None) -> IncidentReport:

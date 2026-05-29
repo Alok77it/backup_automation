@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Play, Trash2, HardDrive, RefreshCw, FolderOpen, FolderInput,
   History, ChevronDown, ChevronUp, Filter, CheckCircle2, XCircle, Clock, Loader2,
-  ArrowRight, Server as ServerIcon, Archive,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { PageHero } from "@/components/ui/page-hero";
@@ -207,8 +206,6 @@ export default function BackupsPage() {
   });
 
   const runningCount = allRuns.filter((r) => r.status === "running" || r.status === "pending").length;
-  const showcaseBackup = backups[0];
-  const liveRows = backups.slice(0, 4);
 
   return (
     <DashboardLayout title="Backups">
@@ -225,87 +222,6 @@ export default function BackupsPage() {
 
       <AlertBanner type="error" message={error} onClose={() => setError("")} />
       <AlertBanner type="success" message={success} onClose={() => setSuccess("")} />
-
-      <div className="mb-6 grid gap-4 xl:grid-cols-[390px_minmax(0,1fr)]">
-        <Card className="glass">
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle>Create backup job</CardTitle>
-              <span className="ops-pill ops-pill-good">encrypted</span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="ops-field"><label>Source server</label><strong>{showcaseBackup?.server_name || "select-server"}</strong></div>
-              <div className="ops-field"><label>Destination</label><strong>{showcaseBackup?.destination_server_name || "local vault"}</strong></div>
-              <div className="ops-field"><label>Backup type</label><strong>{showcaseBackup?.backup_type || "incremental"}</strong></div>
-              <div className="ops-field"><label>Engine</label><strong>{showcaseBackup?.engine || "rsync / rclone"}</strong></div>
-              <div className="ops-field"><label>Source paths</label><strong>{showcaseBackup?.source_paths?.join(", ") || "/srv/app, /var/lib"}</strong></div>
-              <div className="ops-field"><label>Target path</label><strong>{showcaseBackup?.target_path || "/backups/prod-api"}</strong></div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <span className="ops-pill ops-pill-good">Health {showcaseBackup?.health_score?.toFixed(0) || "96"}</span>
-              <span className="ops-pill ops-pill-warn">Risk {showcaseBackup?.risk_level || "medium"}</span>
-              <Button size="sm" onClick={() => showcaseBackup && runBackup(showcaseBackup.id)} disabled={!showcaseBackup}>
-                <Play className="h-3.5 w-3.5" />Run now
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          <Card className="glass">
-            <CardHeader><CardTitle>Backup flow</CardTitle></CardHeader>
-            <CardContent>
-              <div className="grid items-center gap-3 md:grid-cols-[1fr_30px_1fr_30px_1fr_30px_1fr]">
-                {[
-                  ["Source Server", ServerIcon],
-                  ["rsync / rclone", ArrowRight],
-                  ["Local Storage", HardDrive],
-                  ["Destination Server", Archive],
-                ].map(([label, Icon], index) => (
-                  <React.Fragment key={label as string}>
-                    <div className="ops-node">
-                      {React.createElement(Icon as typeof ServerIcon, { className: "h-5 w-5 text-[#c2ef4e]" })}
-                      <p className="mt-2 text-sm font-semibold">{label as string}</p>
-                    </div>
-                    {index < 3 && <div className="hidden h-[2px] bg-gradient-to-r from-[#c2ef4e] to-[#6a5fc1] md:block" />}
-                  </React.Fragment>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glass overflow-hidden">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Live run history</CardTitle>
-                <span className="ops-pill">bytes, duration, logs</span>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <table className="ops-table">
-                <thead><tr><th>Job</th><th>Type</th><th>Status</th><th>Progress</th><th>Health</th></tr></thead>
-                <tbody>
-                  {(liveRows.length ? liveRows : [{ id: "sample", name: "prod-api", backup_type: "incremental", last_run_status: "running", health_score: 68 } as Backup]).map((b) => {
-                    const status = b.last_run_status || "pending";
-                    const progress = status === "completed" ? 100 : status === "failed" ? 42 : Math.max(12, Math.min(95, b.health_score || 62));
-                    return (
-                      <tr key={b.id}>
-                        <td className="font-semibold">{b.name}</td>
-                        <td>{b.backup_type}</td>
-                        <td><Badge variant={status === "completed" ? "success" : status === "failed" ? "error" : status === "pending" ? "warning" : "info"}>{status}</Badge></td>
-                        <td><div className="ops-progress-track"><div className="ops-progress-fill" style={{ width: `${progress}%` }} /></div></td>
-                        <td>{b.health_score?.toFixed(0) || "--"}%</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
 
       <AnimatePresence>
         {showForm && (

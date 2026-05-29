@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Server, HardDrive, AlertTriangle, Database, Shield, Activity, Brain, Terminal, Radio } from "lucide-react";
+import { Server, HardDrive, AlertTriangle, Database, Shield, Activity, Brain } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { MetricCard } from "@/components/dashboard/metric-card";
@@ -60,49 +60,6 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout title="Dashboard">
-      <div className="mb-6 grid gap-4 xl:grid-cols-[1fr_380px]">
-        <Card className="glass">
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="flex items-center gap-2">
-                <Radio className="h-4 w-4 text-[#c2ef4e]" /> Live operations pulse
-              </CardTitle>
-              <span className="ops-pill ops-pill-good">streaming</span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
-              {[
-                ["Backup pipeline", stats?.backup_health_avg ?? 0, "health"],
-                ["Restore readiness", stats?.restore_readiness_avg ?? 0, "confidence"],
-                ["Storage runway", 100 - storagePct, "capacity"],
-              ].map(([label, value, foot]) => (
-                <div key={label as string} className="ops-field">
-                  <label>{label}</label>
-                  <strong>{Number(value).toFixed(0)}%</strong>
-                  <div className="mt-3 ops-progress-track">
-                    <div className="ops-progress-fill" style={{ width: `${Math.max(6, Math.min(100, Number(value)))}%` }} />
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">{foot}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass">
-          <CardHeader><CardTitle className="flex items-center gap-2"><Terminal className="h-4 w-4 text-[#c2ef4e]" />Control terminal</CardTitle></CardHeader>
-          <CardContent>
-            <div className="ops-terminal min-h-[150px]">
-              <div><span>$</span> telemetry connected</div>
-              <div><span>$</span> backup health {formatPercent(stats?.backup_health_avg ?? 0)}</div>
-              <div><span>$</span> failed jobs 24h: {stats?.failed_jobs_24h ?? 0}</div>
-              <div><span>$</span> active servers: {stats?.total_servers ?? 0}</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.75fr)]">
         <section>
           <div className="mb-4">

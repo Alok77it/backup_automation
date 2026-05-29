@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import {
   RotateCcw, Shield, AlertTriangle, Lock, LockOpen,
   CheckCircle2, XCircle, Clock, Loader2, RefreshCw,
-  Terminal, Database,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { PageHero } from "@/components/ui/page-hero";
@@ -197,65 +196,6 @@ export default function RestorePage() {
 
       <AlertBanner type="error" message={error} onClose={() => setError("")} />
       <AlertBanner type="success" message={success} onClose={() => setSuccess("")} />
-
-      <div className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_390px]">
-        <Card className="glass">
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle>Selected recovery point</CardTitle>
-              <span className="ops-pill ops-pill-good">Restore confidence {selectedBackup?.restore_confidence?.toFixed(0) || "94"}%</span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-4">
-              <div className="ops-field"><label>Backup</label><strong>{selectedBackup?.name || "choose-backup"}</strong></div>
-              <div className="ops-field"><label>Destination</label><strong>{destMode === "same" ? selectedBackup?.server_name || "source server" : "custom target"}</strong></div>
-              <div className="ops-field"><label>Mode</label><strong>{destMode === "same" ? "staged restore" : destMode}</strong></div>
-              <div className="ops-field"><label>Protection</label><strong>{overwriteProtection ? "overwrite blocked" : "overwrite allowed"}</strong></div>
-            </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="rounded-[8px] border border-[#362d59] bg-[#1f1633] p-4">
-                <h3 className="mb-3 flex items-center gap-2 font-semibold"><Shield className="h-4 w-4 text-[#c2ef4e]" />AI Restore Analysis</h3>
-                <p className="text-sm text-muted-foreground">{analysis?.ai_summary || "Checksums verified, latest incremental chain intact, target capacity review ready."}</p>
-                <div className="mt-4 space-y-2">
-                  <span className="ops-pill ops-pill-good w-full justify-start">Chain integrity verified</span>
-                  <span className="ops-pill ops-pill-good w-full justify-start">RPO inside policy</span>
-                  <span className="ops-pill ops-pill-warn w-full justify-start">Database locks expected</span>
-                </div>
-              </div>
-              <div className="rounded-[8px] border border-[#362d59] bg-[#1f1633] p-4">
-                <h3 className="mb-5 flex items-center gap-2 font-semibold"><RefreshCw className="h-4 w-4 text-[#c2ef4e]" />Live restore progress</h3>
-                <div className="ops-progress-track"><div className="ops-progress-fill" style={{ width: `${hasActiveJobs ? 68 : 18}%` }} /></div>
-                <div className="mt-6 grid gap-2 sm:grid-cols-2">
-                  <span className="ops-pill">{jobs[0]?.status || "waiting"}</span>
-                  <span className="ops-pill">{jobs[0]?.created_at ? new Date(jobs[0].created_at).toLocaleTimeString() : "00:00:00 elapsed"}</span>
-                  <span className="ops-pill ops-pill-good">safe target</span>
-                  <span className="ops-pill ops-pill-warn">cutover pending</span>
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-3">
-              {["PostgreSQL", "MySQL", "MariaDB", "MongoDB"].map((db) => (
-                <span key={db} className="ops-pill"><Database className="h-3.5 w-3.5 text-[#9dc1f5]" />{db}</span>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass">
-          <CardHeader><CardTitle className="flex items-center gap-2"><Terminal className="h-4 w-4 text-[#c2ef4e]" />Restore terminal</CardTitle></CardHeader>
-          <CardContent>
-            <div className="ops-terminal">
-              <div><span>$</span> restore plan generated: confidence={selectedBackup?.restore_confidence?.toFixed(0) || 94}</div>
-              <div><span>$</span> mounting backup chain {selectedBackup?.name || "latest-point"}</div>
-              <div><span>$</span> validating dump metadata</div>
-              <div><span>$</span> overwrite protection: {overwriteProtection ? "enabled" : "disabled"}</div>
-              <div><span>$</span> streaming restore to {targetPath || "/restore"}</div>
-              <div><span>$</span> pending final approval for cutover</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
       <div className="grid gap-6 lg:grid-cols-2 mb-8">
         <Card className="glass">
