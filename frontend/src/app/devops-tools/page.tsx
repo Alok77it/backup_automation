@@ -17,6 +17,7 @@ import {
   Server,
   Settings2,
   Square,
+  Terminal,
   Trash2,
   Wrench,
 } from "lucide-react";
@@ -1359,7 +1360,7 @@ export default function DevOpsToolsPage() {
     }
   }
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => { void Promise.resolve().then(loadAll); }, []);
 
   const TABS: { id: TabId; label: string; icon: string }[] = [
     { id: "install",     label: "Install Tool",  icon: "🔧" },
@@ -1371,13 +1372,71 @@ export default function DevOpsToolsPage() {
 
   return (
     <DashboardLayout title="DevOps Tools">
-      <div className="space-y-6 p-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold">DevOps Tools</h1>
-          <p className="text-muted-foreground mt-1">
-            Install CI/CD tools, manage credentials, and run automation scripts on your servers.
-          </p>
+      <div className="space-y-6">
+        <div className="grid gap-4 xl:grid-cols-[470px_minmax(0,1fr)]">
+          <Card className="glass">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Tool installer</CardTitle>
+                <span className="ops-pill ops-pill-good">credential safe</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {TOOLS.slice(0, 6).map((tool) => (
+                  <button
+                    key={tool.id}
+                    type="button"
+                    onClick={() => setActiveTab("install")}
+                    className="flex items-center gap-3 rounded-[8px] border border-[#362d59] bg-[#211935] px-4 py-3 text-left transition hover:border-[#c2ef4e]"
+                  >
+                    <Wrench className="h-4 w-4 text-[#c2ef4e]" />
+                    <span className="font-semibold">{tool.name}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="ops-field"><label>GitHub repo deploy</label><strong>main -&gt; prod-api-01</strong></div>
+                <div className="ops-field"><label>Secret storage</label><strong>AES encrypted vault</strong></div>
+              </div>
+              <div className="mt-5 ops-progress-track"><div className="ops-progress-fill" style={{ width: "78%" }} /></div>
+            </CardContent>
+          </Card>
+
+          <Card className="glass">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Automation script runner</CardTitle>
+                <span className="ops-pill ops-pill-warn">approval required</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4 grid gap-3 md:grid-cols-3">
+                <div className="ops-field"><label>Target server</label><strong>{servers[0]?.name || "prod-worker-04"}</strong></div>
+                <div className="ops-field"><label>Agent credential</label><strong>{credentials.find((c) => c.provider === "agent")?.label || "ops-agent-prod"}</strong></div>
+                <div className="ops-field"><label>Execution mode</label><strong>approval-aware</strong></div>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
+                <div className="ops-terminal">
+                  <div><span>$</span> cat &lt;&lt;SCRIPT &gt; /tmp/maintenance.sh</div>
+                  <div><span>$</span> docker compose pull</div>
+                  <div><span>$</span> docker compose up -d --remove-orphans</div>
+                  <div><span>$</span> systemctl reload nginx</div>
+                  <div><span>$</span> SCRIPT</div>
+                </div>
+                <div className="rounded-[8px] border border-[#362d59] bg-[#1f1633] p-4">
+                  <h3 className="mb-3 flex items-center gap-2 font-semibold"><Terminal className="h-4 w-4 text-[#c2ef4e]" />Job output</h3>
+                  <span className="ops-pill ops-pill-warn">Waiting for approval</span>
+                  <div className="mt-4 space-y-2 text-sm text-muted-foreground">
+                    <p>AI draft available</p>
+                    <p>Preflight checks passed</p>
+                    <p>Audit entry prepared</p>
+                    <p>Execution logs stream after approval</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Tab bar */}

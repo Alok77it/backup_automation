@@ -68,7 +68,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className="fixed left-0 top-0 z-40 flex h-screen w-[var(--sidebar-width)] flex-col sidebar-glow"
+      className="flex min-h-full w-[var(--sidebar-width)] flex-col sidebar-glow"
       style={{ background: "#1f1633", borderRight: "1px solid #362d59" }}
     >
       {/* Wordmark */}

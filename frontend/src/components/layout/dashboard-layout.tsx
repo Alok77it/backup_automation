@@ -16,21 +16,22 @@ export function DashboardLayout({ children, title }: { children: React.ReactNode
   }, [router]);
 
   return (
-    <div className="relative min-h-screen bg-background">
+    <div className="relative min-h-screen overflow-x-hidden bg-background">
       <CsrfSync />
-      {/* Subtle grid texture */}
       <div className="pointer-events-none fixed inset-0 tech-grid opacity-100" />
-      <Sidebar />
-      <div className="relative pl-[var(--sidebar-width)]">
+      <div className="ops-shell">
+        <Sidebar />
+        <div className="ops-content">
         <Header title={title} />
         <motion.main
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="p-6 md:p-8"
+          className="ops-main"
         >
           {children}
         </motion.main>
+        </div>
       </div>
     </div>
   );

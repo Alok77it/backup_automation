@@ -23,13 +23,13 @@ export function PageHero({
       <div className="flex items-start gap-4">
         <div
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px]"
-          style={{ background: "#212121", border: "1px solid #353535" }}
+          style={{ background: "#2d2540", border: "1px solid #362d59" }}
         >
-          <Icon className="h-5 w-5" style={{ color: "#f36458" }} />
+          <Icon className="h-5 w-5" style={{ color: "#c2ef4e" }} />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-white">{title}</h2>
-          <p className="text-sm" style={{ color: "#797979" }}>{description}</p>
+          <h2 className="text-lg font-semibold text-white">{title}</h2>
+          <p className="text-sm" style={{ color: "#bdb8c0" }}>{description}</p>
         </div>
       </div>
       {action}

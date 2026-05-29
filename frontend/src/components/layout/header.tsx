@@ -1,5 +1,5 @@
 "use client";
-import { Bell } from "lucide-react";
+import { Bell, Radio } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
@@ -10,21 +10,27 @@ export function Header({ title }: { title: string }) {
   const [user, setUser] = useState<{ full_name: string; email: string } | null>(null);
 
   useEffect(() => {
-    const u = localStorage.getItem("user");
-    if (u) setUser(JSON.parse(u));
-    api<unknown[]>("/alerts?unresolved_only=true")
-      .then((data) => setAlertCount(Array.isArray(data) ? data.length : 0))
-      .catch(() => {});
+    void Promise.resolve().then(() => {
+      const u = localStorage.getItem("user");
+      if (u) setUser(JSON.parse(u));
+      api<unknown[]>("/alerts?unresolved_only=true")
+        .then((data) => setAlertCount(Array.isArray(data) ? data.length : 0))
+        .catch(() => {});
+    });
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between px-6 backdrop-blur-xl md:px-8"
-      style={{ background: "rgba(31,22,51,0.92)", borderBottom: "1px solid #362d59" }}>
-      <motion.h1 key={title} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
-        className="text-base font-semibold tracking-tight text-white">
-        {title}
-      </motion.h1>
-      <div className="flex items-center gap-2">
+    <header className="ops-topbar">
+      <div>
+        <p className="eyebrow">Live operations workspace</p>
+        <motion.h1 key={title} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+          className="ops-screen-title">
+          {title}
+        </motion.h1>
+      </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <span className="ops-pill ops-pill-good"><Radio className="h-3.5 w-3.5" />Live telemetry</span>
+        <span className="ops-pill">Org: Client Cloud</span>
         <Button variant="ghost" size="icon" className="relative"
           onClick={() => (window.location.href = "/alerts")}>
           <Bell className="h-4 w-4" style={{ color: "#bdb8c0" }} />
