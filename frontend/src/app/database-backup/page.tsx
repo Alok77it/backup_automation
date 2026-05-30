@@ -53,6 +53,7 @@ interface ProgressInfo {
   status: string; progress_pct: number | null;
   elapsed_seconds: number; bytes_processed: number;
   error_message: string | null; log_tail: string | null;
+  stage?: string | null; last_message?: string | null;
 }
 
 /* ── Backup progress bar ────────────────────────────────────────────── */
@@ -60,9 +61,7 @@ function LiveProgress({ backupId, runId, initialStatus }: {
   backupId: string; runId: string; initialStatus: string;
 }) {
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
-  const [elapsed, setElapsed]   = useState(0);
-  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const fetch = async () => {
@@ -70,28 +69,23 @@ function LiveProgress({ backupId, runId, initialStatus }: {
         const p = await api<ProgressInfo>(`/backups/${backupId}/runs/${runId}/progress`);
         setProgress(p);
         if (p.status === "completed" || p.status === "failed") {
-          if (pollRef.current)    clearInterval(pollRef.current);
-          if (elapsedRef.current) clearInterval(elapsedRef.current);
+          if (pollRef.current) clearInterval(pollRef.current);
         }
       } catch {}
     };
     if (initialStatus === "running" || initialStatus === "pending") {
       fetch();
-      pollRef.current    = setInterval(fetch, 2000);
-      elapsedRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+      pollRef.current = setInterval(fetch, 2000);
     }
-    return () => {
-      if (pollRef.current)    clearInterval(pollRef.current);
-      if (elapsedRef.current) clearInterval(elapsedRef.current);
-    };
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [backupId, runId, initialStatus]);
 
-  const pct    = progress?.progress_pct ?? (initialStatus === "running" ? Math.min(90, elapsed / 60 * 20) : initialStatus === "completed" ? 100 : 0);
+  const pct = progress?.progress_pct ?? (initialStatus === "completed" ? 100 : null);
   const status = progress?.status || initialStatus;
 
   if (status === "pending" && !progress) return (
     <div className="mt-2">
-      <div className="flex justify-between text-xs text-gray-400 mb-1"><span>Queued…</span><span>0%</span></div>
+      <div className="flex justify-between text-xs text-gray-400 mb-1"><span>Queued...</span><span>0%</span></div>
       <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
         <motion.div className="h-2 w-8 rounded-full bg-amber-400" animate={{ x: [0, 200, 0] }} transition={{ duration: 1.5, repeat: Infinity }} />
       </div>
@@ -101,18 +95,29 @@ function LiveProgress({ backupId, runId, initialStatus }: {
   if (status === "running") return (
     <div className="mt-2 space-y-1">
       <div className="flex justify-between text-xs text-blue-600 mb-1">
-        <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Running… {Math.round(progress?.elapsed_seconds || elapsed)}s</span>
-        <span>{pct.toFixed(0)}%</span>
+        <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Running... {Math.round(progress?.elapsed_seconds || 0)}s</span>
+        <span>{pct == null ? "live" : `${pct.toFixed(0)}%`}</span>
       </div>
       <div className="h-2.5 w-full rounded-full bg-blue-100 overflow-hidden">
-        <motion.div className="h-2.5 rounded-full bg-blue-500" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.5 }} />
+        <motion.div
+          className="h-2.5 rounded-full bg-blue-500"
+          initial={false}
+          animate={pct == null ? { x: ["-30%", "100%"] } : { width: `${pct}%` }}
+          transition={pct == null ? { duration: 1.4, repeat: Infinity } : { duration: 0.5 }}
+          style={pct == null ? { width: "35%" } : undefined}
+        />
       </div>
+      <p className="text-xs text-gray-400">
+        {progress?.stage?.replaceAll("_", " ") || "worker running"}
+        {progress?.bytes_processed ? ` - ${formatBytes(progress.bytes_processed)}` : ""}
+        {progress?.last_message ? ` - ${progress.last_message}` : ""}
+      </p>
     </div>
   );
 
   if (status === "completed") return (
     <div className="mt-2">
-      <div className="flex justify-between text-xs text-[#f36458] mb-1"><span>✓ Complete</span><span>100%</span></div>
+      <div className="flex justify-between text-xs text-[#f36458] mb-1"><span>Complete</span><span>100%</span></div>
       <div className="h-2 w-full rounded-full bg-[#212121]"><div className="h-2 rounded-full bg-[#212121]0 w-full" /></div>
       {progress?.bytes_processed ? <p className="text-xs text-gray-400 mt-0.5">{formatBytes(progress.bytes_processed)} dumped</p> : null}
     </div>
@@ -126,12 +131,9 @@ function LiveProgress({ backupId, runId, initialStatus }: {
   return null;
 }
 
-/* ── Restore progress bar ───────────────────────────────────────────── */
 function RestoreProgress({ jobId, onDone }: { jobId: string; onDone: (ok: boolean) => void }) {
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
-  const [elapsed, setElapsed]   = useState(0);
-  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const fetch = async () => {
@@ -139,23 +141,18 @@ function RestoreProgress({ jobId, onDone }: { jobId: string; onDone: (ok: boolea
         const p = await api<ProgressInfo>(`/restore/jobs/${jobId}/progress`);
         setProgress(p);
         if (p.status === "completed" || p.status === "failed") {
-          if (pollRef.current)    clearInterval(pollRef.current);
-          if (elapsedRef.current) clearInterval(elapsedRef.current);
+          if (pollRef.current) clearInterval(pollRef.current);
           onDone(p.status === "completed");
         }
       } catch {}
     };
     fetch();
-    pollRef.current    = setInterval(fetch, 2000);
-    elapsedRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => {
-      if (pollRef.current)    clearInterval(pollRef.current);
-      if (elapsedRef.current) clearInterval(elapsedRef.current);
-    };
+    pollRef.current = setInterval(fetch, 2000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [jobId]);
 
   const status = progress?.status || "pending";
-  const pct    = status === "completed" ? 100 : Math.min(90, elapsed / 120 * 60);
+  const pct = progress?.progress_pct ?? (status === "completed" ? 100 : null);
 
   if (status === "completed") return (
     <div className="rounded-xl bg-[#212121] border border-[#353535] p-4 text-sm text-[#f36458] flex items-center gap-2">
@@ -177,13 +174,22 @@ function RestoreProgress({ jobId, onDone }: { jobId: string; onDone: (ok: boolea
   return (
     <div className="space-y-2">
       <div className="flex justify-between text-xs text-blue-600">
-        <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Restoring… {elapsed}s elapsed</span>
-        <span>{pct.toFixed(0)}%</span>
+        <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Restoring... {Math.round(progress?.elapsed_seconds || 0)}s</span>
+        <span>{pct == null ? "live" : `${pct.toFixed(0)}%`}</span>
       </div>
       <div className="h-2.5 w-full rounded-full bg-blue-100 overflow-hidden">
-        <motion.div className="h-2.5 rounded-full bg-blue-500" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.5 }} />
+        <motion.div
+          className="h-2.5 rounded-full bg-blue-500"
+          initial={false}
+          animate={pct == null ? { x: ["-30%", "100%"] } : { width: `${pct}%` }}
+          transition={pct == null ? { duration: 1.4, repeat: Infinity } : { duration: 0.5 }}
+          style={pct == null ? { width: "35%" } : undefined}
+        />
       </div>
-      <p className="text-xs text-gray-400">Streaming dump into destination database via {status === "pending" ? "queue" : "SSH/local connection"}…</p>
+      <p className="text-xs text-gray-400">
+        {progress?.stage?.replaceAll("_", " ") || (status === "pending" ? "queued" : "SSH/local connection")}
+        {progress?.last_message ? ` - ${progress.last_message}` : ""}
+      </p>
     </div>
   );
 }

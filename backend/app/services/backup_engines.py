@@ -1,10 +1,12 @@
 import logging
 import os
+import re
 import gzip
 import shutil
 import subprocess
 import tarfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -42,27 +44,58 @@ class BackupResult:
     error_message: str | None = None
 
 
-def _run_command(cmd: list[str], env: dict | None = None, timeout: int = 86400) -> tuple[int, str, str]:
+ProgressCallback = Callable[[str], None]
+
+
+def _run_command(
+    cmd: list[str],
+    env: dict | None = None,
+    timeout: int = 86400,
+    progress_callback: ProgressCallback | None = None,
+) -> tuple[int, str, str]:
     full_env = {**os.environ, **(env or {})}
-    proc = subprocess.run(
+    if not progress_callback:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=full_env,
+            timeout=timeout,
+        )
+        output = proc.stdout + proc.stderr
+        return proc.returncode, output, proc.stderr
+
+    proc = subprocess.Popen(
         cmd,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         env=full_env,
-        timeout=timeout,
+        bufsize=1,
     )
-    output = proc.stdout + proc.stderr
-    return proc.returncode, output, proc.stderr
+    chunks: list[str] = []
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            chunks.append(line)
+            progress_callback(line.rstrip())
+        code = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        chunks.append(f"\nCommand timed out after {timeout}s\n")
+        progress_callback(f"Command timed out after {timeout}s")
+        raise
+    output = "".join(chunks)
+    return code, output, output
 
 
 def _parse_rsync_bytes(output: str) -> int:
     """Extract total transferred bytes from rsync --stats output."""
     for line in output.splitlines():
         if "Total file size" in line:
-            try:
-                return int(line.split()[-1].replace(",", ""))
-            except (ValueError, IndexError):
-                pass
+            match = re.search(r"Total file size:\s*([0-9,]+)", line)
+            if match:
+                return int(match.group(1).replace(",", ""))
     return 0
 
 
@@ -95,6 +128,7 @@ def run_rsync_backup(
     remote: str | None = None,
     ssh_key_path: str | None = None,
     ssh_password: str | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> BackupResult:
     """
     Back up one or more source_paths to target_path using rsync.
@@ -129,7 +163,30 @@ def run_rsync_backup(
         dest = os.path.join(target_path, Path(src).name or "root")
         os.makedirs(dest, exist_ok=True)
 
-        cmd = ["rsync", "-a", "--stats", "--delete"]
+        cmd = [
+            "rsync",
+            "-a",
+            "--stats",
+            "--delete",
+            "--partial",
+            "--timeout=600",
+            "--contimeout=30",
+            "--info=progress2,name1,stats2",
+        ]
+        if remote and src.strip() == "/":
+            cmd.extend([
+                "--one-file-system",
+                "--exclude=/proc/***",
+                "--exclude=/sys/***",
+                "--exclude=/dev/***",
+                "--exclude=/run/***",
+                "--exclude=/tmp/***",
+                "--exclude=/mnt/***",
+                "--exclude=/media/***",
+                "--exclude=/lost+found",
+            ])
+        if os.path.abspath(target_path).startswith(os.path.abspath(src.rstrip("/") or "/") + os.sep):
+            cmd.extend([f"--exclude={os.path.abspath(target_path)}/***"])
         if compression:
             cmd.append("-z")
         if backup_type == "incremental":
@@ -144,7 +201,9 @@ def run_rsync_backup(
         else:
             cmd.extend([src + "/", dest + "/"])
 
-        code, output, _ = _run_command(cmd, env=ssh_env or None)
+        if progress_callback:
+            progress_callback(f"Starting rsync: {src} -> {dest}")
+        code, output, _ = _run_command(cmd, env=ssh_env or None, progress_callback=progress_callback)
         logs.append(output)
         if code != 0:
             success = False
@@ -165,6 +224,8 @@ def run_rsync_backup(
     snapshot_id = f"files-{int(start)}.tar.gz" if compression else f"files-{int(start)}"
     if success and compression:
         archive_path = os.path.join(target_path, snapshot_id)
+        if progress_callback:
+            progress_callback(f"Creating compressed archive: {archive_path}")
         with tarfile.open(archive_path, "w:gz") as tar:
             for item in os.listdir(target_path):
                 item_path = os.path.join(target_path, item)
@@ -201,6 +262,7 @@ def restore_rsync(
     remote: str | None = None,
     ssh_key_path: str | None = None,
     ssh_password: str | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> BackupResult:
     """
     Restore files from backup_path back to target_path using rsync.
@@ -225,6 +287,8 @@ def restore_rsync(
     temp_dir: str | None = None
     source_path = backup_path
     if os.path.isfile(backup_path) and backup_path.endswith((".tar.gz", ".tgz")):
+        if progress_callback:
+            progress_callback(f"Extracting archive for restore: {backup_path}")
         temp_dir = tempfile.mkdtemp(prefix="backup-restore-")
         with tarfile.open(backup_path, "r:gz") as tar:
             root = os.path.realpath(temp_dir)
@@ -240,7 +304,15 @@ def restore_rsync(
     if remote:
         ssh_opts, ssh_env = _build_ssh_opts(ssh_key_path, ssh_password)
 
-    cmd = ["rsync", "-a", "--stats"]
+    cmd = [
+        "rsync",
+        "-a",
+        "--stats",
+        "--partial",
+        "--timeout=600",
+        "--contimeout=30",
+        "--info=progress2,name1,stats2",
+    ]
     if compression:
         cmd.append("-z")
     if ssh_opts:
@@ -252,7 +324,9 @@ def restore_rsync(
         cmd.extend([source_path + "/", target_path + "/"])
 
     try:
-        code, output, _ = _run_command(cmd, env=ssh_env or None)
+        if progress_callback:
+            progress_callback(f"Starting restore rsync: {source_path} -> {target_path}")
+        code, output, _ = _run_command(cmd, env=ssh_env or None, progress_callback=progress_callback)
     finally:
         if temp_dir:
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -276,6 +350,7 @@ def run_rclone_backup(
     source: str,
     target_path: str,
     config_extra: dict | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> BackupResult:
     """
     Sync a source (rclone remote or local path) to target_path using rclone.
@@ -287,7 +362,9 @@ def run_rclone_backup(
     if config_extra:
         for k, v in config_extra.items():
             cmd.extend([f"--{k}", str(v)])
-    code, output, _ = _run_command(cmd)
+    if progress_callback:
+        progress_callback(f"Starting rclone sync: {source} -> {target_path}")
+    code, output, _ = _run_command(cmd, progress_callback=progress_callback)
     duration = time.monotonic() - start
 
     bytes_val = 0
@@ -326,6 +403,7 @@ def run_database_backup(
     ssh_remote: str | None = None,
     ssh_key_path: str | None = None,
     ssh_password: str | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> BackupResult:
     """Dump a database to a file using the appropriate CLI tool.
 
@@ -335,6 +413,8 @@ def run_database_backup(
     import tempfile
     start = time.monotonic()
     os.makedirs(os.path.dirname(target_file) if os.path.dirname(target_file) else ".", exist_ok=True)
+    if progress_callback:
+        progress_callback(f"Preparing {db_type} dump for database '{db_name}'")
     final_target_file = target_file
     compress_output = target_file.endswith(".gz")
     if compress_output:
@@ -385,6 +465,8 @@ def run_database_backup(
 
             ssh_parts = _build_ssh_prefix(ssh_key_path, ssh_password, ssh_remote)
             import subprocess
+            if progress_callback:
+                progress_callback(f"Running remote pg_dump via SSH: {ssh_remote}")
             with open(target_file, "wb") as out_f:
                 proc = subprocess.run(
                     ssh_parts + [remote_cmd],
@@ -409,6 +491,8 @@ def run_database_backup(
 
             ssh_parts = _build_ssh_prefix(ssh_key_path, ssh_password, ssh_remote)
             import subprocess
+            if progress_callback:
+                progress_callback(f"Running remote mysqldump via SSH: {ssh_remote}")
             with open(target_file, "wb") as out_f:
                 proc = subprocess.run(
                     ssh_parts + [remote_cmd],
@@ -431,6 +515,8 @@ def run_database_backup(
             remote_cmd = f"mongodump --uri '{mongo_uri}' --archive={archive_remote} && cat {archive_remote}"
             ssh_parts = _build_ssh_prefix(ssh_key_path, ssh_password, ssh_remote)
             import subprocess
+            if progress_callback:
+                progress_callback(f"Running remote mongodump via SSH: {ssh_remote}")
             with open(target_file, "wb") as out_f:
                 proc = subprocess.run(ssh_parts + [remote_cmd], stdout=out_f, stderr=subprocess.PIPE, timeout=3600)
             code = proc.returncode
@@ -466,11 +552,15 @@ def run_database_backup(
 
         import subprocess
         env = {**os.environ, **env_extra}
+        if progress_callback:
+            progress_callback(f"Running local dump command: {cmd[0]}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, env=env)
         code = result.returncode
         output = result.stdout + result.stderr
 
     if compress_output and code == 0 and os.path.exists(target_file):
+        if progress_callback:
+            progress_callback(f"Compressing dump: {final_target_file}")
         with open(target_file, "rb") as src, gzip.open(final_target_file, "wb") as dst:
             shutil.copyfileobj(src, dst)
         os.unlink(target_file)
@@ -582,6 +672,7 @@ def run_database_restore(
     ssh_remote: str | None = None,
     ssh_key_path: str | None = None,
     ssh_password: str | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> BackupResult:
     """Restore a database dump file to the target database.
 
@@ -594,11 +685,15 @@ def run_database_restore(
 
     if not os.path.exists(dump_file):
         return BackupResult(False, 0, 0, 0, None, False, 1, "", f"Dump file not found: {dump_file}")
+    if progress_callback:
+        progress_callback(f"Preparing {db_type} restore from {dump_file}")
 
     dump_size = os.path.getsize(dump_file)
     temp_dump: str | None = None
     restore_file = dump_file
     if dump_file.endswith(".gz"):
+        if progress_callback:
+            progress_callback("Decompressing dump for restore")
         suffixes = Path(dump_file[:-3]).suffixes
         suffix = "".join(suffixes) or ".dump"
         tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
@@ -627,6 +722,8 @@ def run_database_restore(
             if db_password:
                 remote_cmd = f"PGPASSWORD={repr(db_password)} {remote_cmd}"
 
+            if progress_callback:
+                progress_callback(f"Running remote pg_restore via SSH: {ssh_remote}")
             with open(restore_file, "rb") as dump_f:
                 proc = subprocess.run(
                     ssh_parts + [remote_cmd],
@@ -650,6 +747,8 @@ def run_database_restore(
             remote_parts += [db_name or ""]
             remote_cmd = " ".join(remote_parts)
 
+            if progress_callback:
+                progress_callback(f"Running remote mysql restore via SSH: {ssh_remote}")
             with open(restore_file, "rb") as dump_f:
                 proc = subprocess.run(
                     ssh_parts + [remote_cmd],
@@ -673,6 +772,8 @@ def run_database_restore(
             # Copy archive to remote first, then mongorestore
             scp_parts = _build_ssh_prefix(ssh_key_path, ssh_password, ssh_remote)
             # Use cat + ssh to pipe file to remote tmp
+            if progress_callback:
+                progress_callback(f"Copying MongoDB archive to remote host: {ssh_remote}")
             with open(restore_file, "rb") as dump_f:
                 copy_proc = subprocess.run(
                     ssh_parts + [f"cat > {archive_remote}"],
@@ -685,6 +786,8 @@ def run_database_restore(
                 code = copy_proc.returncode
             else:
                 remote_cmd = f"mongorestore --uri '{mongo_uri}' --archive={archive_remote} --drop && rm -f {archive_remote}"
+                if progress_callback:
+                    progress_callback(f"Running remote mongorestore via SSH: {ssh_remote}")
                 restore_proc = subprocess.run(
                     ssh_parts + [remote_cmd],
                     capture_output=True,
@@ -725,6 +828,8 @@ def run_database_restore(
             # mysql reads from stdin
             env = {**os.environ, **env_extra}
             with open(restore_file, "rb") as dump_f:
+                if progress_callback:
+                    progress_callback("Running local mysql restore")
                 result_proc = subprocess.run(
                     cmd, stdin=dump_f, capture_output=True, text=True, timeout=7200, env=env
                 )
@@ -758,6 +863,8 @@ def run_database_restore(
             return BackupResult(False, 0, 0, 0, None, False, 1, "", f"Unsupported database type: {db_type}")
 
         env = {**os.environ, **env_extra}
+        if progress_callback:
+            progress_callback(f"Running local restore command: {cmd[0]}")
         result_proc = subprocess.run(cmd, capture_output=True, text=True, timeout=7200, env=env)
         code = result_proc.returncode
         output = result_proc.stdout + result_proc.stderr

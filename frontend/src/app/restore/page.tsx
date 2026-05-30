@@ -36,6 +36,7 @@ interface RestoreProgress {
   job_id: string; status: string; progress_pct: number | null;
   elapsed_seconds: number; started_at: string | null;
   completed_at: string | null; error_message: string | null; log_tail: string | null;
+  stage?: string | null; last_message?: string | null;
 }
 
 function StatusIcon({ status }: { status: string }) {
@@ -47,9 +48,7 @@ function StatusIcon({ status }: { status: string }) {
 
 function RestoreProgressBar({ jobId }: { jobId: string }) {
   const [progress, setProgress] = useState<RestoreProgress | null>(null);
-  const [elapsed, setElapsed] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const fetch = async () => {
@@ -58,17 +57,12 @@ function RestoreProgressBar({ jobId }: { jobId: string }) {
         setProgress(p);
         if (p.status === "completed" || p.status === "failed") {
           if (pollRef.current) clearInterval(pollRef.current);
-          if (elapsedRef.current) clearInterval(elapsedRef.current);
         }
       } catch {}
     };
     fetch();
     pollRef.current = setInterval(fetch, 2000);
-    elapsedRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      if (elapsedRef.current) clearInterval(elapsedRef.current);
-    };
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [jobId]);
 
   if (!progress) return (
@@ -80,11 +74,11 @@ function RestoreProgressBar({ jobId }: { jobId: string }) {
   );
 
   const status = progress.status;
-  const pct = progress.progress_pct ?? Math.min(90, (progress.elapsed_seconds / 120) * 60);
+  const pct = progress.progress_pct ?? (status === "completed" ? 100 : null);
 
   if (status === "completed") return (
     <div className="mt-1 space-y-0.5">
-      <div className="flex justify-between text-xs text-[#f36458]"><span>✓ Complete</span><span>100%</span></div>
+      <div className="flex justify-between text-xs text-[#f36458]"><span>Complete</span><span>100%</span></div>
       <div className="h-2 w-full rounded-full bg-[#212121]"><div className="h-2 w-full rounded-full bg-[#212121]0" /></div>
     </div>
   );
@@ -95,15 +89,25 @@ function RestoreProgressBar({ jobId }: { jobId: string }) {
     </div>
   );
 
-  if (status === "running") return (
+  if (status === "running" || status === "pending") return (
     <div className="mt-1 space-y-0.5">
       <div className="flex justify-between text-xs text-blue-600">
-        <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" />{Math.round(progress.elapsed_seconds || elapsed)}s</span>
-        <span>{pct.toFixed(0)}%</span>
+        <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" />{Math.round(progress.elapsed_seconds)}s</span>
+        <span>{pct == null ? "live" : `${pct.toFixed(0)}%`}</span>
       </div>
       <div className="h-2 w-full rounded-full bg-blue-100 overflow-hidden">
-        <motion.div className="h-2 rounded-full bg-blue-500" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.5 }} />
+        <motion.div
+          className="h-2 rounded-full bg-blue-500"
+          initial={false}
+          animate={pct == null ? { x: ["-30%", "100%"] } : { width: `${pct}%` }}
+          transition={pct == null ? { duration: 1.4, repeat: Infinity } : { duration: 0.5 }}
+          style={pct == null ? { width: "35%" } : undefined}
+        />
       </div>
+      <p className="text-xs text-gray-400">
+        {progress.stage?.replaceAll("_", " ") || status}
+        {progress.last_message ? ` - ${progress.last_message}` : ""}
+      </p>
     </div>
   );
 

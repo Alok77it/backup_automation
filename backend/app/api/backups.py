@@ -203,17 +203,20 @@ async def run_database_backup_direct(
     run = BackupRun(
         backup_id=backup.id,
         status=JobStatus.PENDING,
-        started_at=_dt.now(_tz.utc),
+        metadata_json={"stage": "queued", "queued_by": "database_backup"},
     )
     db.add(run)
     await db.flush()
-
-    _exec.delay(str(run.id))
     await create_log(
         db, membership.organization_id, "backup",
         f"Database backup started: {data.db_type}/{data.db_name} on server",
         backup_id=backup.id,
     )
+    await db.commit()
+    task = _exec.delay(str(run.id))
+    run.celery_task_id = task.id
+    await db.commit()
+    await db.refresh(run)
     return BackupRunResponse.model_validate(run)
 
 
@@ -301,7 +304,7 @@ async def get_run_progress(
             if completed.tzinfo is None:
                 completed = completed.replace(tzinfo=_tz.utc)
             elapsed = (completed - started).total_seconds()
-        elif run.status.value == "running":
+        elif run.status.value in {"running", "pending"}:
             from datetime import datetime
             elapsed = (datetime.now(_tz.utc) - started).total_seconds()
 
@@ -319,6 +322,10 @@ async def get_run_progress(
         progress_pct = None
     elif run.status.value == "pending":
         progress_pct = 0
+    elif run.status.value == "running":
+        meta = run.metadata_json or {}
+        if progress_pct is None and meta.get("current_bytes"):
+            progress_pct = None
 
     return {
         "run_id": str(run.id),
@@ -326,14 +333,16 @@ async def get_run_progress(
         "status": run.status.value,
         "progress_pct": progress_pct,
         "elapsed_seconds": round(elapsed, 1),
-        "bytes_processed": run.bytes_processed,
-        "bytes_added": run.bytes_added,
+        "bytes_processed": (run.metadata_json or {}).get("current_bytes") or run.bytes_processed,
+        "bytes_added": (run.metadata_json or {}).get("current_bytes") or run.bytes_added,
         "duration_seconds": run.duration_seconds,
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         "error_message": run.error_message,
         "failed_chunks": run.failed_chunks,
         "log_tail": run.log_output[-1000:] if run.log_output else None,
+        "stage": (run.metadata_json or {}).get("stage"),
+        "last_message": (run.metadata_json or {}).get("last_message"),
     }
 
 
@@ -350,11 +359,19 @@ async def run_backup(
     if not backup:
         raise HTTPException(status_code=404, detail="Backup not found")
 
-    run = BackupRun(backup_id=backup.id, status=JobStatus.PENDING)
+    run = BackupRun(
+        backup_id=backup.id,
+        status=JobStatus.PENDING,
+        metadata_json={"stage": "queued", "queued_by": "manual"},
+    )
     db.add(run)
     await db.flush()
-    execute_backup_run.delay(str(run.id))
     await create_log(db, membership.organization_id, "backup", f"Backup run started for '{backup.name}'", backup_id=backup.id)
+    await db.commit()
+    task = execute_backup_run.delay(str(run.id))
+    run.celery_task_id = task.id
+    await db.commit()
+    await db.refresh(run)
     return BackupRunResponse.model_validate(run)
 
 

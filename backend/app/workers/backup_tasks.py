@@ -18,6 +18,7 @@ from app.models.entities import (
     BackupRun,
     BackupType,
     JobStatus,
+    RestoreJob,
     Server,
 )
 from app.services.backup_engines import (
@@ -163,6 +164,64 @@ def _sync_session() -> Session:
     return Session(engine)
 
 
+def _append_text(existing: str | None, message: str, limit: int = 20000) -> str:
+    line = message.strip()
+    if not line:
+        return existing or ""
+    combined = f"{existing or ''}\n{datetime.now(timezone.utc).isoformat()} {line}".strip()
+    return combined[-limit:]
+
+
+def _dir_size(path: str | None) -> int:
+    if not path or not os.path.exists(path):
+        return 0
+    total = 0
+    for root, _, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                pass
+    return total
+
+
+def _make_run_progress(session: Session, run: BackupRun, stage: str, path: str | None = None):
+    last_update = {"ts": 0.0}
+
+    def update(message: str) -> None:
+        now = datetime.now(timezone.utc)
+        monotonic = datetime.now().timestamp()
+        meta = dict(run.metadata_json or {})
+        meta["stage"] = stage
+        meta["last_message"] = message[-500:]
+        meta["last_progress_at"] = now.isoformat()
+        if path and monotonic - last_update["ts"] >= 5:
+            current_bytes = _dir_size(path)
+            meta["current_bytes"] = current_bytes
+            run.bytes_processed = current_bytes
+            run.bytes_added = current_bytes
+            last_update["ts"] = monotonic
+        run.metadata_json = meta
+        run.log_output = _append_text(run.log_output, message)
+        session.commit()
+
+    return update
+
+
+def _make_restore_progress(session: Session, job: RestoreJob, stage: str):
+    def update(message: str) -> None:
+        now = datetime.now(timezone.utc)
+        meta = dict(job.ai_analysis_json or {})
+        meta["stage"] = stage
+        meta["last_message"] = message[-500:]
+        meta["last_progress_at"] = now.isoformat()
+        job.ai_analysis_json = meta
+        job.log_output = _append_text(job.log_output, message)
+        session.commit()
+
+    return update
+
+
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=300)
 def execute_backup_run(self, run_id: str) -> dict:
     session = _sync_session()
@@ -177,11 +236,23 @@ def execute_backup_run(self, run_id: str) -> dict:
         run.status = JobStatus.RUNNING
         run.started_at = datetime.now(timezone.utc)
         run.celery_task_id = self.request.id
+        run.log_output = _append_text(run.log_output, f"Worker picked up backup run {run.id}")
         session.commit()
 
         server = session.get(Server, backup.server_id) if backup.server_id else None
         target = _run_storage_dir(backup, run, server)
         os.makedirs(target, exist_ok=True)
+        run.metadata_json = {
+            **(run.metadata_json or {}),
+            "storage_dir": target,
+            "stage": "initializing",
+            "current_bytes": 0,
+        }
+        run.log_output = _append_text(
+            run.log_output,
+            f"Backup target initialized at {target}",
+        )
+        session.commit()
 
         config = backup.config_json or {}
         sources = backup.source_paths or ["/tmp"]
@@ -235,8 +306,10 @@ def execute_backup_run(self, run_id: str) -> dict:
                     ssh_remote=remote,
                     ssh_key_path=ssh_key_path,
                     ssh_password=password,
+                    progress_callback=_make_run_progress(session, run, "database_dump", target),
                 )
             elif btype == BackupType.DOCKER:
+                _make_run_progress(session, run, "docker_export", target)("Starting Docker backup")
                 result = run_docker_backup(
                     config.get("container_ids", []),
                     target,
@@ -247,6 +320,7 @@ def execute_backup_run(self, run_id: str) -> dict:
                     sources[0] if sources else "/",
                     target,
                     config.get("rclone", {}),
+                    progress_callback=_make_run_progress(session, run, "rclone_sync", target),
                 )
             else:
                 # Default: rsync (handles both local and remote via SSH)
@@ -258,6 +332,7 @@ def execute_backup_run(self, run_id: str) -> dict:
                     remote,
                     ssh_key_path,
                     password,  # used by sshpass when no key is set
+                    progress_callback=_make_run_progress(session, run, "rsync_copy", target),
                 )
         finally:
             if ssh_key_path and os.path.exists(ssh_key_path):
@@ -286,6 +361,7 @@ def execute_backup_run(self, run_id: str) -> dict:
                         remote=dest_remote,
                         ssh_key_path=dest_key_path,
                         ssh_password=dest_password,
+                        progress_callback=_make_run_progress(session, run, "destination_push", target),
                     )
                     if not push_result.success:
                         logger.warning("Destination push failed: %s", push_result.error_message)
@@ -306,11 +382,13 @@ def execute_backup_run(self, run_id: str) -> dict:
             **(run.metadata_json or {}),
             "server_name": server.name if server else "local-server",
             "storage_dir": target,
+            "stage": "completed" if result.success else "failed",
+            "current_bytes": result.bytes_processed,
             "snapshot_path": os.path.join(target, result.snapshot_id) if result.snapshot_id else target,
             "archive_path": os.path.join(target, result.snapshot_id) if result.snapshot_id and str(result.snapshot_id).endswith((".tar.gz", ".tgz")) else None,
             "dump_file": os.path.join(target, result.snapshot_id) if result.snapshot_id and backup.backup_type == BackupType.DATABASE else None,
         }
-        run.log_output = result.log_output
+        run.log_output = _append_text(run.log_output, result.log_output)
         run.error_message = result.error_message
         session.commit()
 
@@ -342,6 +420,8 @@ def execute_backup_run(self, run_id: str) -> dict:
             if run:
                 run.status = JobStatus.FAILED
                 run.error_message = str(e)
+                run.log_output = _append_text(run.log_output, f"Backup failed: {e}")
+                run.metadata_json = {**(run.metadata_json or {}), "stage": "failed"}
                 run.completed_at = datetime.now(timezone.utc)
                 session.commit()
         except Exception:
@@ -367,12 +447,15 @@ def execute_restore_job(self, job_id: str) -> dict:
         job.status = JobStatus.RUNNING
         job.started_at = datetime.now(timezone.utc)
         job.celery_task_id = self.request.id
+        job.log_output = _append_text(job.log_output, f"Worker picked up restore job {job.id}")
         session.commit()
 
         config = backup.config_json or {}
 
-        # Resolve server credentials for remote restore (push back to source server)
-        server = session.get(Server, backup.server_id) if backup.server_id else None
+        # Resolve server credentials for remote restore.
+        meta = job.ai_analysis_json or {}
+        target_server_id = meta.get("target_server_id") or (str(backup.server_id) if backup.server_id else None)
+        server = session.get(Server, uuid.UUID(target_server_id)) if target_server_id else None
         remote = None
         ssh_key_path = None
         restore_password = None
@@ -422,20 +505,33 @@ def execute_restore_job(self, job_id: str) -> dict:
                 remote=remote,
                 ssh_key_path=ssh_key_path,
                 ssh_password=restore_password,
+                progress_callback=_make_restore_progress(session, job, "rsync_restore"),
             )
         finally:
             if ssh_key_path and os.path.exists(ssh_key_path):
                 os.unlink(ssh_key_path)
 
         job.status = JobStatus.COMPLETED if result.success else JobStatus.FAILED
-        job.log_output = result.log_output
+        job.log_output = _append_text(job.log_output, result.log_output)
         job.error_message = result.error_message
+        job.ai_analysis_json = {**(job.ai_analysis_json or {}), "stage": "completed" if result.success else "failed"}
 
         job.completed_at = datetime.now(timezone.utc)
         session.commit()
         return {"status": job.status.value, "job_id": str(job.id)}
     except Exception as e:
         logger.exception("Restore failed: %s", e)
+        try:
+            job = session.get(RestoreJob, uuid.UUID(job_id))
+            if job:
+                job.status = JobStatus.FAILED
+                job.error_message = str(e)
+                job.log_output = _append_text(job.log_output, f"Restore failed: {e}")
+                job.completed_at = datetime.now(timezone.utc)
+                job.ai_analysis_json = {**(job.ai_analysis_json or {}), "stage": "failed"}
+                session.commit()
+        except Exception:
+            pass
         raise self.retry(exc=e)
     finally:
         session.close()
@@ -595,11 +691,13 @@ def run_scheduled_backups() -> dict:
             run = BackupRun(
                 backup_id=backup.id,
                 status=JobStatus.PENDING,
-                started_at=datetime.now(timezone.utc),
+                metadata_json={"queued_by": "scheduler"},
             )
             session.add(run)
             session.commit()
-            execute_backup_run.delay(str(run.id))
+            task = execute_backup_run.delay(str(run.id))
+            run.celery_task_id = task.id
+            session.commit()
             triggered += 1
             logger.info(
                 "Triggered scheduled backup '%s' (id=%s) for cron='%s' prev=%s",
@@ -637,6 +735,7 @@ def execute_db_restore_job(self, job_id: str) -> dict:
         job.status = JobStatus.RUNNING
         job.started_at = datetime.now(timezone.utc)
         job.celery_task_id = self.request.id
+        job.log_output = _append_text(job.log_output, f"Worker picked up database restore job {job.id}")
         session.commit()
 
         # ai_analysis_json holds the destination details set by the API
@@ -692,14 +791,16 @@ def execute_db_restore_job(self, job_id: str) -> dict:
                 ssh_remote=ssh_remote,
                 ssh_key_path=ssh_key_path,
                 ssh_password=ssh_password,
+                progress_callback=_make_restore_progress(session, job, "database_restore"),
             )
         finally:
             if ssh_key_path and os.path.exists(ssh_key_path):
                 os.unlink(ssh_key_path)
 
         job.status = JobStatus.COMPLETED if result.success else JobStatus.FAILED
-        job.log_output = result.log_output
+        job.log_output = _append_text(job.log_output, result.log_output)
         job.error_message = result.error_message
+        job.ai_analysis_json = {**(job.ai_analysis_json or {}), "stage": "completed" if result.success else "failed"}
         job.completed_at = datetime.now(timezone.utc)
         session.commit()
         return {"status": job.status.value, "job_id": str(job.id)}
@@ -712,6 +813,8 @@ def execute_db_restore_job(self, job_id: str) -> dict:
             if job:
                 job.status = JobStatus.FAILED
                 job.error_message = str(exc)
+                job.log_output = _append_text(job.log_output, f"DB restore failed: {exc}")
+                job.ai_analysis_json = {**(job.ai_analysis_json or {}), "stage": "failed"}
                 job.completed_at = datetime.now(timezone.utc)
                 session.commit()
         except Exception:

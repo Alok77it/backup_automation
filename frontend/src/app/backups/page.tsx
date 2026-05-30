@@ -34,7 +34,18 @@ interface BackupRun {
   bytes_processed: number; bytes_added: number;
   duration_seconds: number | null; error_message: string | null;
   failed_chunks: number; log_output: string | null;
-  metadata_json?: { backup_name?: string } | null;
+  metadata_json?: { backup_name?: string; stage?: string; last_message?: string; current_bytes?: number } | null;
+}
+
+interface RunProgress {
+  status: string;
+  progress_pct: number | null;
+  elapsed_seconds: number;
+  bytes_processed: number;
+  error_message: string | null;
+  log_tail: string | null;
+  stage?: string | null;
+  last_message?: string | null;
 }
 
 function RunStatusIcon({ status }: { status: string }) {
@@ -44,33 +55,49 @@ function RunStatusIcon({ status }: { status: string }) {
   return <Clock className="h-4 w-4 text-amber-400" />;
 }
 
-function ProgressBar({ status, startedAt }: { status: string; startedAt: string | null }) {
-  const [elapsed, setElapsed] = useState(0);
+function ProgressBar({ run }: { run: BackupRun }) {
+  const [progress, setProgress] = useState<RunProgress | null>(null);
   useEffect(() => {
-    if (status !== "running" && status !== "pending") return;
-    const start = startedAt ? new Date(startedAt).getTime() : Date.now();
-    const tick = () => setElapsed(Math.floor((Date.now() - start) / 1000));
-    tick();
-    const id = setInterval(tick, 1000);
+    if (run.status !== "running" && run.status !== "pending") return;
+    const fetchProgress = async () => {
+      try {
+        const data = await api<RunProgress>(`/backups/${run.backup_id}/runs/${run.id}/progress`);
+        setProgress(data);
+      } catch {
+        // Table polling still refreshes the status.
+      }
+    };
+    void fetchProgress();
+    const id = setInterval(fetchProgress, 2000);
     return () => clearInterval(id);
-  }, [status, startedAt]);
+  }, [run.backup_id, run.id, run.status]);
 
-  if (status !== "running" && status !== "pending") return null;
-  const fakeProgress = Math.min(95, (elapsed / 180) * 100); // caps at 95% after 3 min
+  if (run.status !== "running" && run.status !== "pending") return null;
+  const status = progress?.status || run.status;
+  const pct = progress?.progress_pct;
+  const elapsed = Math.round(progress?.elapsed_seconds || 0);
+  const bytes = progress?.bytes_processed || run.metadata_json?.current_bytes || run.bytes_processed;
+  const stage = progress?.stage || run.metadata_json?.stage || (status === "pending" ? "queued" : "running");
+  const message = progress?.last_message || run.metadata_json?.last_message;
   return (
     <div className="mt-2">
       <div className="flex justify-between text-xs text-gray-500 mb-1">
-        <span>{status === "pending" ? "Queued — waiting for worker…" : `Running… ${elapsed}s elapsed`}</span>
-        <span>{fakeProgress.toFixed(0)}%</span>
+        <span>
+          {status === "pending" ? "Queued - waiting for worker..." : `${stage.replaceAll("_", " ")} - ${elapsed}s`}
+          {bytes > 0 ? ` - ${formatBytes(bytes)}` : ""}
+        </span>
+        <span>{pct == null ? "live" : `${pct.toFixed(0)}%`}</span>
       </div>
       <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
         <motion.div
-          className="h-2 rounded-full bg-[#212121]0"
-          initial={{ width: 0 }}
-          animate={{ width: `${fakeProgress}%` }}
-          transition={{ duration: 0.5 }}
+          className="h-2 rounded-full bg-blue-500"
+          initial={false}
+          animate={pct == null ? { x: ["-30%", "100%"] } : { width: `${pct}%` }}
+          transition={pct == null ? { duration: 1.4, repeat: Infinity } : { duration: 0.5 }}
+          style={pct == null ? { width: "35%" } : undefined}
         />
       </div>
+      {message && <p className="mt-1 line-clamp-2 text-xs text-gray-400">{message}</p>}
     </div>
   );
 }
@@ -547,7 +574,7 @@ export default function BackupsPage() {
                                 {r.status}
                               </Badge>
                             </div>
-                            <ProgressBar status={r.status} startedAt={r.started_at} />
+                            <ProgressBar run={r} />
                           </td>
                           <td className="px-5 py-3 text-gray-500 text-xs">
                             {r.started_at ? new Date(r.started_at).toLocaleString() : "—"}

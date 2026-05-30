@@ -115,12 +115,14 @@ async def execute_recommendation(
         retry = BackupRun(
             backup_id=old_run.backup_id,
             status=JobStatus.PENDING,
-            started_at=datetime.now(timezone.utc),
             metadata_json={"retry_of": str(old_run.id), "triggered_by": "incident_recommendation"},
         )
         db.add(retry)
         await db.flush()
-        execute_backup_run.delay(str(retry.id))
+        await db.commit()
+        task = execute_backup_run.delay(str(retry.id))
+        retry.celery_task_id = task.id
+        await db.commit()
         rec.result_message = f"Retry run queued: {retry.id}"
     elif rec.action_type in {"preflight_check", "ssh_check"}:
         rec.result_message = "Preflight check recorded. Run the server connection test from Infrastructure before retrying."

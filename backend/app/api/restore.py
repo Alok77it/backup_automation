@@ -108,8 +108,12 @@ async def create_restore(
     )
     db.add(job)
     await db.flush()
-    execute_restore_job.delay(str(job.id))
     await create_log(db, membership.organization_id, "restore", f"Restore job created for '{backup.name}'", backup_id=backup.id)
+    await db.commit()
+    task = execute_restore_job.delay(str(job.id))
+    job.celery_task_id = task.id
+    await db.commit()
+    await db.refresh(job)
     return RestoreJobResponse.model_validate(job)
 
 
@@ -179,7 +183,9 @@ async def get_restore_progress(
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "completed_at": job.completed_at.isoformat() if job.completed_at else None,
         "error_message": job.error_message,
-        "log_tail": job.log_output[-500:] if job.log_output else None,
+        "log_tail": job.log_output[-1000:] if job.log_output else None,
+        "stage": (job.ai_analysis_json or {}).get("stage"),
+        "last_message": (job.ai_analysis_json or {}).get("last_message"),
     }
 
 
@@ -269,11 +275,14 @@ async def create_db_restore(
     )
     db.add(job)
     await db.flush()
-
-    execute_db_restore_job.delay(str(job.id))
     await create_log(
         db, membership.organization_id, "restore",
         f"DB restore job created: {data.db_type}/{data.db_name}",
         backup_id=backup.id,
     )
+    await db.commit()
+    task = execute_db_restore_job.delay(str(job.id))
+    job.celery_task_id = task.id
+    await db.commit()
+    await db.refresh(job)
     return RestoreJobResponse.model_validate(job)
